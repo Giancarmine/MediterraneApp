@@ -1,0 +1,18 @@
+## default connection pool
+spring:
+  datasource:
+    hikari:
+      connectionTimeout: 20000
+      maximumPoolSize: 5
+
+    ## PostgreSQL
+    url: jdbc:postgresql://ec2-54-247-89-181.eu-west-1.compute.amazonaws.com:5432/d11hr6v8uukj2k
+    username: yajojxwwzfbzyv
+    password: ENC(ruuinfkyPCBUO+HJCR+0o5bFEPW0w2s6N4lxE/N5y7XhQz9KL5tCx/Zas1n9WCofpspFt6JlDQAnDQUGu2p24HABYj2hXip9CAD298o3z3c=)
+
+  # Hibernate ddl auto (create, create-drop, validate, update)
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+      dialect: org.hibernate.dialect.PostgreSQLDialec
