@@ -8,24 +8,20 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import javax.persistence.*;
 import java.util.Date;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Data
-@Table(name = "recipe")
+@Table(name = "ingredient")
 @EntityListeners(AuditingEntityListener.class)
-public class Recipe {
+public class Ingredient {
     @Id
     @GeneratedValue(generator = "uuid2")
     @GenericGenerator(name = "uuid2", strategy = "uuid2")
     @Column(name = "uuid", updatable = false, nullable = false)
     UUID uuid;
 
-    String title;
-
-    @ManyToMany(cascade={CascadeType.DETACH, CascadeType.PERSIST})
-    List<Ingredient> ingredients;
+    String text;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
