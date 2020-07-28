@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class RecipeMapper {
-
     public RecipeDto toDto (Recipe dao) {
         RecipeDto dto = new RecipeDto();
         dto.setUuid(dao.getUuid().toString());
