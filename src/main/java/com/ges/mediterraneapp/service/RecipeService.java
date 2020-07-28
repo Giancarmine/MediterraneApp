@@ -28,4 +28,12 @@ public class RecipeService {
     public Recipe createRecipe (Recipe recipe) {
         return recipeRepository.save(recipe);
     }
+
+    public Recipe updateRecipe (Recipe recipe) {
+        return recipeRepository.save(recipe);
+    }
+
+    public void deleteRecipe (String uuid) {
+        recipeRepository.delete(findRecipeByUuid(uuid));
+    }
 }
