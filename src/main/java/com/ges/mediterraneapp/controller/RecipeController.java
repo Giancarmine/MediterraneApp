@@ -45,6 +45,14 @@ public class RecipeController {
         return modelMapper.map(recipeService.createRecipe(modelMapper.map(recipe, Recipe.class)), RecipeDto.class);
     }
 
+
+    @PostMapping("/bulk")
+    public List<RecipeDto> createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
+        return recipes.stream()
+                .map(recipe -> modelMapper.map(recipeService.createRecipe(modelMapper.map(recipe, Recipe.class)), RecipeDto.class))
+                .collect(Collectors.toList());
+    }
+
     @PutMapping("/{uuid}")
     public RecipeDto updateRecipe (@PathVariable String uuid, @Valid @RequestBody RecipeDto recipeDto) {
         Recipe recipe = recipeService.findRecipeByUuid(uuid);

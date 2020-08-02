@@ -22,9 +22,17 @@ public class Recipe {
     @Column(name = "uuid", updatable = false, nullable = false)
     UUID uuid;
 
-    String title;
+    String name;
+    String relations;
+    String preparedTime;
+    String cookedTime;
+    String totalTime;
 
-    @ManyToMany(cascade={CascadeType.DETACH, CascadeType.PERSIST})
+    @ElementCollection
+    @Column(length=2500)
+    List<String> steps;
+
+    @ManyToMany(cascade = CascadeType.ALL)
     List<Ingredient> ingredients;
 
     @Column(name = "created_at", nullable = false, updatable = false)

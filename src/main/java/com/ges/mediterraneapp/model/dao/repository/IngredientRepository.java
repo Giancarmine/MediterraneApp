@@ -10,5 +10,5 @@ import java.util.UUID;
 @Repository
 public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
     Ingredient findByUuid (UUID uuid);
-    Optional<Ingredient> findByText (String text);
+    Optional<Ingredient> findByNameIngredient (String nameIngredient);
 }

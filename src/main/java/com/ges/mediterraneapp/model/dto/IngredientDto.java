@@ -8,5 +8,7 @@ import lombok.Data;
 public class IngredientDto {
     String uuid;
 
-    String text;
+    String amount;
+    String measurement;
+    String nameIngredient;
 }

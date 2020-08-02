@@ -10,7 +10,13 @@ import java.util.List;
 public class RecipeDto {
     String uuid;
 
-    String title;
+    String name;
+    String relations;
+    String preparedTime;
+    String cookedTime;
+    String totalTime;
+
+    List<String> steps;
 
     List<IngredientDto> ingredients;
 }

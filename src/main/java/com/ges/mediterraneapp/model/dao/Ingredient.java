@@ -21,7 +21,9 @@ public class Ingredient {
     @Column(name = "uuid", updatable = false, nullable = false)
     UUID uuid;
 
-    String text;
+    String amount;
+    String measurement;
+    String nameIngredient;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
