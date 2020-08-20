@@ -25,6 +25,11 @@ public class RecipeService {
         return recipeRepository.findByUuid(UUID.fromString(uuid));
     };
 
+    public Recipe findRecipeByName (String name) {
+        return recipeRepository.findByName(name)
+                .orElse(new Recipe());
+    };
+
     public Recipe createRecipe (Recipe recipe) {
         return recipeRepository.save(recipe);
     }

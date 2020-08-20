@@ -8,7 +8,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import javax.persistence.*;
 import java.util.Date;
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -30,10 +30,10 @@ public class Recipe {
 
     @ElementCollection
     @Column(length=2500)
-    List<String> steps;
+    Set<String> steps;
 
     @ManyToMany(cascade = CascadeType.ALL)
-    List<Ingredient> ingredients;
+    Set<Ingredient> ingredients;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp

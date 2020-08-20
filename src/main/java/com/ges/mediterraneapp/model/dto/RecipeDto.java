@@ -3,7 +3,7 @@ package com.ges.mediterraneapp.model.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
-import java.util.List;
+import java.util.Set;
 
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -16,7 +16,7 @@ public class RecipeDto {
     String cookedTime;
     String totalTime;
 
-    List<String> steps;
+    Set<String> steps;
 
-    List<IngredientDto> ingredients;
+    Set<IngredientDto> ingredients;
 }

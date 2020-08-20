@@ -1,14 +1,16 @@
 package com.ges.mediterraneapp.controller;
 
+import com.ges.mediterraneapp.mapper.RecipeMapper;
 import com.ges.mediterraneapp.model.dao.Recipe;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
 import com.ges.mediterraneapp.service.RecipeService;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotNull;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -17,48 +19,51 @@ import java.util.stream.Collectors;
 public class RecipeController {
     @Autowired
     private final RecipeService recipeService;
-    private static final ModelMapper modelMapper = new ModelMapper();
 
     public RecipeController(RecipeService recipeService) {
         this.recipeService = recipeService;
     }
 
     @GetMapping("/status")
-    public String status() {
-        return "I`m alive";
+    public HttpStatus status() {
+        return HttpStatus.I_AM_A_TEAPOT;
     }
 
     @GetMapping
-    public List<RecipeDto> getAllRecipes () {
-        return recipeService.getAllRecipe().stream()
-                .map(element -> modelMapper.map(element, RecipeDto.class))
-                .collect(Collectors.toList());
+    public ResponseEntity<List<RecipeDto>> getAllRecipes () {
+        return new ResponseEntity<>(recipeService.getAllRecipe().stream()
+                .map(RecipeMapper.INSTANCE::toDto)
+                .collect(Collectors.toList()), HttpStatus.OK);
     }
 
     @GetMapping("/{uuid}")
-    public RecipeDto read(@PathVariable String uuid) {
-        return modelMapper.map(recipeService.findRecipeByUuid(uuid), RecipeDto.class);
+    public ResponseEntity<RecipeDto> read(@PathVariable String uuid) {
+        return new ResponseEntity<>(RecipeMapper.INSTANCE.toDto(recipeService.findRecipeByUuid(uuid)), HttpStatus.OK);
     }
 
     @PostMapping
-    public RecipeDto createRecipe (@Valid @RequestBody RecipeDto recipe) {
-        return modelMapper.map(recipeService.createRecipe(modelMapper.map(recipe, Recipe.class)), RecipeDto.class);
+    public ResponseEntity<RecipeDto> createRecipe (@Valid @RequestBody RecipeDto recipeDto) {
+        Recipe recipe = recipeService.findRecipeByName(recipeDto.getName());
+        if (recipe.getUuid() != null) {
+            recipeDto.setUuid(recipe.getUuid().toString());
+        }
+        RecipeMapper.INSTANCE.updateModel(recipeDto, recipe);
+
+        return new ResponseEntity<>(RecipeMapper.INSTANCE.toDto(recipeService.createRecipe(recipe)), HttpStatus.CREATED);
     }
 
-
     @PostMapping("/bulk")
-    public List<RecipeDto> createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
-        return recipes.stream()
-                .map(recipe -> modelMapper.map(recipeService.createRecipe(modelMapper.map(recipe, Recipe.class)), RecipeDto.class))
-                .collect(Collectors.toList());
+    public HttpStatus createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
+        recipes.forEach(this::createRecipe);
+        return HttpStatus.CREATED;
     }
 
     @PutMapping("/{uuid}")
-    public RecipeDto updateRecipe (@PathVariable String uuid, @Valid @RequestBody RecipeDto recipeDto) {
+    public ResponseEntity<RecipeDto> updateRecipe (@PathVariable String uuid, @Valid @RequestBody RecipeDto recipeDto) {
         Recipe recipe = recipeService.findRecipeByUuid(uuid);
-        modelMapper.map(recipeDto, recipe);
+        RecipeMapper.INSTANCE.updateModel(recipeDto, recipe);
 
-        return modelMapper.map(recipeService.updateRecipe(recipe), RecipeDto.class);
+        return new ResponseEntity<>(RecipeMapper.INSTANCE.toDto(recipeService.updateRecipe(recipe)), HttpStatus.OK);
     }
 
     @DeleteMapping("/{uuid}")
