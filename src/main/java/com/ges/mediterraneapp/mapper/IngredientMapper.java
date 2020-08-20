@@ -13,14 +13,14 @@ public interface IngredientMapper {
     IngredientMapper INSTANCE = Mappers.getMapper(IngredientMapper.class);
 
     @Mapping(target = "uuid", expression = "java(ingredient.getUuid().toString())")
-    IngredientDto ingredientToIngredientDto(Ingredient ingredient);
+    IngredientDto toDto(Ingredient ingredient);
 
     @Mappings({
         @Mapping(target = "uuid", expression = "java(ingredientDto.getUuid() != null ? UUID.fromString(ingredientDto.getUuid()) : null)"),
         @Mapping(target = "createdAt", ignore = true),
         @Mapping(target = "updatedAt", ignore = true)
     })
-    Ingredient ingredientDtoToIngredient(IngredientDto ingredientDto);
+    Ingredient toModel(IngredientDto ingredientDto);
 
     @Mappings({
             @Mapping(target = "uuid", expression = "java(ingredientDto.getUuid() != null ? UUID.fromString(ingredientDto.getUuid()) : null)"),
