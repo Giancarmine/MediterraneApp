@@ -2,36 +2,73 @@ package com.ges.mediterraneapp.mapper;
 
 import com.ges.mediterraneapp.model.dao.Ingredient;
 import com.ges.mediterraneapp.model.dao.Recipe;
+import com.ges.mediterraneapp.model.dto.IngredientDto;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
-import org.mapstruct.*;
-import org.mapstruct.factory.Mappers;
+import com.ges.mediterraneapp.service.IngredientService;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Set;
 import java.util.UUID;
 
-@Mapper(imports = {UUID.class, Set.class, Ingredient.class},
-        uses = IngredientMapper.class,
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-public interface RecipeMapper {
-    RecipeMapper INSTANCE = Mappers.getMapper(RecipeMapper.class);
+import static java.util.stream.Collectors.toSet;
 
-    @Mappings({
-            @Mapping(target = "uuid", expression = "java(recipe.getUuid().toString())"),
-            @Mapping(source = "ingredients", target = "ingredients")
-    })
-    RecipeDto toDto(Recipe recipe);
+public class RecipeMapper {
+    @Autowired
+    private final IngredientService ingredientService;
 
-    @Mappings({
-            @Mapping(target = "uuid", expression = "java(UUID.fromString(recipeDto.getUuid()))"),
-            @Mapping(source = "ingredients", target = "ingredients")
-    })
-    Recipe toModel(RecipeDto recipeDto);
+    private final IngredientMapper ingredientMapper;
 
-    @Mappings({
-            @Mapping(target = "uuid", expression = "java((recipeDto.getUuid() != null) ? UUID.fromString(recipeDto.getUuid()) : null)"),
-            @Mapping(source = "ingredients", target = "ingredients"),
-            @Mapping(target = "createdAt", ignore = true),
-            @Mapping(target = "updatedAt", ignore = true)
-    })
-    void updateModel(RecipeDto recipeDto, @MappingTarget Recipe recipe);
+    public RecipeMapper(IngredientService ingredientService) {
+        this.ingredientService = ingredientService;
+        this.ingredientMapper = new IngredientMapper();
+    }
+
+    public RecipeDto toDto(Recipe recipe) {
+        RecipeDto recipeDto = new RecipeDto();
+
+        recipeDto.setUuid(recipe.getUuid().toString());
+        recipeDto.setName(recipe.getName());
+        recipeDto.setRelations(recipe.getRelations());
+        recipeDto.setPreparedTime(recipe.getPreparedTime());
+        recipeDto.setCookedTime(recipe.getCookedTime());
+        recipeDto.setTotalTime(recipe.getTotalTime());
+
+        Set<String> steps = recipe.getSteps();
+        if (steps != null) {
+            recipeDto.setSteps(steps);
+        }
+
+        Set<Ingredient> ingredients = recipe.getIngredients();
+        if (ingredients != null) {
+            recipeDto.setIngredients(ingredients.stream()
+                    .map(ingredientMapper::toDto)
+                    .collect(toSet()));
+        }
+
+        return recipeDto;
+    }
+
+    public Recipe updateModel(RecipeDto recipeDto, Recipe recipe) {
+        recipe.setUuid(recipeDto.getUuid() != null ? UUID.fromString(recipeDto.getUuid()) : null);
+        recipe.setName(recipeDto.getName());
+        recipe.setRelations(recipeDto.getRelations());
+        recipe.setPreparedTime(recipeDto.getPreparedTime());
+        recipe.setCookedTime(recipeDto.getCookedTime());
+        recipe.setTotalTime(recipeDto.getTotalTime());
+
+        Set<String> steps = recipeDto.getSteps();
+        if (steps != null) {
+            recipe.setSteps(steps);
+        }
+
+        Set<IngredientDto> ingredients = recipeDto.getIngredients();
+        if (ingredients != null) {
+            recipe.setIngredients(ingredients.stream()
+                    .map(ingredient -> ingredientService.findIngredientByNameAndAmountAndMeasurement(ingredient.getNameIngredient(),
+                            ingredient.getAmount(),
+                            ingredient.getMeasurement()))
+                    .collect(toSet()));
+        }
+        return recipe;
+    }
 }

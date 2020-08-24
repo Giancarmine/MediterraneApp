@@ -1,6 +1,8 @@
 package com.ges.mediterraneapp.model.dao;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -12,6 +14,8 @@ import java.util.UUID;
 
 @Entity
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "ingredient")
 @EntityListeners(AuditingEntityListener.class)
 public class Ingredient {
@@ -19,11 +23,11 @@ public class Ingredient {
     @GeneratedValue(generator = "uuid2")
     @GenericGenerator(name = "uuid2", strategy = "uuid2")
     @Column(name = "uuid", updatable = false, nullable = false)
-    UUID uuid;
+    private UUID uuid;
 
-    String amount;
-    String measurement;
-    String nameIngredient;
+    private String amount;
+    private String measurement;
+    private String nameIngredient;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
@@ -32,4 +36,10 @@ public class Ingredient {
     @Column(name = "updated_at", nullable = false)
     @UpdateTimestamp
     private Date updatedAt;
+
+    public Ingredient(String nameIngredient, String amount, String measurement) {
+        this.setNameIngredient(nameIngredient);
+        this.setAmount(amount);
+        this.setMeasurement(measurement);
+    }
 }

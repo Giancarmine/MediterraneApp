@@ -2,30 +2,26 @@ package com.ges.mediterraneapp.mapper;
 
 import com.ges.mediterraneapp.model.dao.Ingredient;
 import com.ges.mediterraneapp.model.dto.IngredientDto;
-import org.mapstruct.*;
-import org.mapstruct.factory.Mappers;
 
 import java.util.UUID;
 
-@Mapper(imports = UUID.class,
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-public interface IngredientMapper {
-    IngredientMapper INSTANCE = Mappers.getMapper(IngredientMapper.class);
+public class IngredientMapper {
+    IngredientDto toDto (Ingredient ingredient) {
+        IngredientDto ingredientDto = new IngredientDto();
 
-    @Mapping(target = "uuid", expression = "java(ingredient.getUuid().toString())")
-    IngredientDto toDto(Ingredient ingredient);
+        ingredientDto.setUuid(ingredient.getUuid().toString());
+        ingredientDto.setNameIngredient(ingredient.getNameIngredient());
+        ingredientDto.setAmount(ingredient.getAmount());
+        ingredientDto.setMeasurement(ingredient.getMeasurement());
+        return ingredientDto;
+    }
 
-    @Mappings({
-        @Mapping(target = "uuid", expression = "java(ingredientDto.getUuid() != null ? UUID.fromString(ingredientDto.getUuid()) : null)"),
-        @Mapping(target = "createdAt", ignore = true),
-        @Mapping(target = "updatedAt", ignore = true)
-    })
-    Ingredient toModel(IngredientDto ingredientDto);
+    public Ingredient updateModel(IngredientDto ingredientDto, Ingredient ingredient) {
+        ingredient.setUuid(ingredientDto.getUuid() != null ? UUID.fromString(ingredientDto.getUuid()) : null);
+        ingredient.setNameIngredient(ingredientDto.getNameIngredient());
+        ingredient.setAmount(ingredientDto.getAmount());
+        ingredient.setMeasurement(ingredientDto.getMeasurement());
 
-    @Mappings({
-            @Mapping(target = "uuid", expression = "java(ingredientDto.getUuid() != null ? UUID.fromString(ingredientDto.getUuid()) : null)"),
-            @Mapping(target = "createdAt", ignore = true),
-            @Mapping(target = "updatedAt", ignore = true)
-    })
-    void updateModel(IngredientDto ingredientDto, @MappingTarget Ingredient ingredient);
+        return ingredient;
+    }
 }

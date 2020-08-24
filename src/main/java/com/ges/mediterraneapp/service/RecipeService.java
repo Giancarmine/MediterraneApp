@@ -22,7 +22,8 @@ public class RecipeService {
     }
 
     public Recipe findRecipeByUuid (String uuid) {
-        return recipeRepository.findByUuid(UUID.fromString(uuid));
+        return recipeRepository.findByUuid(UUID.fromString(uuid))
+                .orElseThrow();
     };
 
     public Recipe findRecipeByName (String name) {

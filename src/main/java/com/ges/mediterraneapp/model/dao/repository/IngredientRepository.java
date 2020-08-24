@@ -9,6 +9,6 @@ import java.util.UUID;
 
 @Repository
 public interface IngredientRepository extends JpaRepository<Ingredient, UUID> {
-    Ingredient findByUuid (UUID uuid);
-    Optional<Ingredient> findByNameIngredient (String nameIngredient);
+    Optional<Ingredient> findByUuid (UUID uuid);
+    Optional<Ingredient> findByNameIngredientAndAmountAndMeasurement (String nameIngredient, String Amount, String Measurement);
 }
