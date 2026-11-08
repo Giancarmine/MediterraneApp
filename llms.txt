@@ -1,0 +1,58 @@
+# MediterraneApp
+
+> Spring Boot 2.2 / Java 11 REST API for recipes, ingredients, and preparation steps.
+> Legacy portfolio project (2020): builds, but has no tests, CI, authentication, or
+> maintained deployment. License: GPL-3.0.
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): canonical guide for AI coding agents.
+- [README.md](README.md): human-facing overview and quick start.
+- [docs/API.md](docs/API.md): endpoints, payloads, status codes, and quirks.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, request flow, persistence model.
+- [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md): prioritized defects and suggested fixes.
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): local PostgreSQL, Docker, legacy Heroku.
+- [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow.
+- [SECURITY.md](SECURITY.md): private reporting and credential rotation.
+
+## Project facts
+
+- Package: `com.ges.mediterraneapp`.
+- Entry point: `MediterraneappApplication`.
+- Controller: `RecipeController`, base path `/recipe`.
+- Services: `RecipeService`, `IngredientService`.
+- Mappers: `RecipeMapper`, `IngredientMapper` (hand-written, no MapStruct).
+- Entities: `Recipe`, `Ingredient`.
+- Repositories: `RecipeRepository`, `IngredientRepository`, plus unused
+  `StepRepository`.
+- Build: `./mvnw -B -DskipTests package`; test: `./mvnw test` (no tests currently).
+- Configuration: `src/main/resources/application.yml`; override the datasource with
+  `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
+  `SPRING_DATASOURCE_PASSWORD`.
+
+## API summary
+
+- `GET /recipe/status` -> HTTP 200 body `"I_AM_A_TEAPOT"`.
+- `GET /recipe` -> all recipes.
+- `GET /recipe/{uuid}` -> one recipe, 500 if absent.
+- `POST /recipe` -> create or update by `name`, 201.
+- `POST /recipe/bulk` -> batch create/update, HTTP 200 body `"CREATED"`.
+- `PUT /recipe/{uuid}` -> update; send the same UUID in the body.
+- `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`.
+
+## Safety
+
+- The repository is public. Do not add secrets, real `.env` files, Jasypt keys, or
+  database credentials.
+- The checked-in database host, username, and `ENC(...)` password are historical and
+  must be treated as compromised. Rotate them before use.
+- Do not run tests or the application against the remote database.
+- See [SECURITY.md](SECURITY.md) before reporting or fixing a credential leak.
+
+## Optional
+
+- [.env.example](.env.example): environment variable names and placeholders.
+- [.editorconfig](.editorconfig): formatting defaults.
+- [.github/copilot-instructions.md](.github/copilot-instructions.md): Copilot pointer.
+- [.cursor/rules/project.mdc](.cursor/rules/project.mdc): Cursor rule.
+- [CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md): assistant-specific pointers.

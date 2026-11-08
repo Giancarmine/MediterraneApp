@@ -1,0 +1,165 @@
+# Deployment and local setup
+
+The project is a standard Spring Boot JAR. It can run locally with Maven, in Docker, or
+on a Java platform such as Heroku. The checked-in configuration still targets a retired
+Heroku PostgreSQL instance, so treat every deployment path below as a template that
+needs fresh credentials.
+
+## Prerequisites
+
+- JDK 11 (the POM targets Java 11).
+- Maven is not required separately: the committed wrapper downloads Maven 3.6.3.
+- PostgreSQL for a real run (12 or newer recommended). The schema is created by Hibernate.
+- Docker is optional.
+
+## Local run
+
+1. Start PostgreSQL:
+
+   ```bash
+   docker run --rm --name mediterraneapp-db \
+     -e POSTGRES_DB=mediterraneapp \
+     -e POSTGRES_USER=mediterraneapp \
+     -e POSTGRES_PASSWORD=change-me \
+     -p 5432:5432 -d postgres:16
+   ```
+
+2. Export the datasource overrides:
+
+   ```bash
+   export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
+   export SPRING_DATASOURCE_USERNAME='mediterraneapp'
+   export SPRING_DATASOURCE_PASSWORD='change-me'
+   ```
+
+3. Build and run:
+
+   ```bash
+   ./mvnw -B clean package
+   ./mvnw spring-boot:run
+   ```
+
+4. Verify:
+
+   ```bash
+   curl -i http://localhost:8080/recipe/status
+   # 200, body: "I_AM_A_TEAPOT"
+   curl -i http://localhost:8080/recipe
+   # 200, body: []
+   ```
+
+The first startup creates the tables because `spring.jpa.hibernate.ddl-auto=update`.
+There are no migration scripts.
+
+### Using `.env`
+
+`.env.example` documents the variable names, but Spring Boot does not read `.env`
+automatically. Either export the values, use a tool such as `direnv`, or pass the file
+to Docker with `--env-file`. Never commit a filled `.env`.
+
+## Configuration reference
+
+| Variable | Default in `application.yml` | Required |
+| --- | --- | --- |
+| `SPRING_DATASOURCE_URL` | Retired remote PostgreSQL URL | Yes, override it |
+| `SPRING_DATASOURCE_USERNAME` | Remote username | Yes, override it |
+| `SPRING_DATASOURCE_PASSWORD` | `ENC(...)` Jasypt value | Yes, override it |
+| `JASYPT_ENCRYPTOR_PASSWORD` | none | Only if the `ENC(...)` value is used |
+| `SERVER_PORT` | `8080` | No |
+| `JAVA_OPTS` | none | No, used by the Docker `CMD` |
+
+Spring Boot relaxed binding maps `SPRING_DATASOURCE_*` to `spring.datasource.*`.
+Environment variables take precedence over `application.yml`.
+
+Other current settings:
+
+- Hikari: `connectionTimeout=20000`, `maximumPoolSize=5`.
+- `spring.jpa.show-sql=true`.
+- `spring.jpa.hibernate.ddl-auto=update`.
+- Hibernate dialect is misspelled and nested under the wrong key; Hibernate
+  auto-detects the dialect, so this is harmless today. Fix it in a dedicated change.
+
+## Docker
+
+```bash
+docker build -t mediterraneapp .
+docker run --rm -p 8080:8080 \
+  -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/mediterraneapp' \
+  -e SPRING_DATASOURCE_USERNAME='mediterraneapp' \
+  -e SPRING_DATASOURCE_PASSWORD='change-me' \
+  mediterraneapp
+```
+
+On Linux, `host.docker.internal` is not always available. Use the host's bridge address
+or a Docker network that contains both containers.
+
+The Dockerfile is a two-stage build:
+
+1. `maven:3-jdk-11` runs `mvn clean install` inside the image.
+2. `openjdk:11-jdk` copies the fat JAR and runs it with `JAVA_OPTS`.
+
+Known weaknesses (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
+
+- Both base images are EOL and may fail to pull. Prefer
+  `maven:3.9-eclipse-temurin-11` and `eclipse-temurin:11-jre`.
+- `COPY --from=0 "MediterraneApp/target/*.jar" app.jar` wraps the wildcard in quotes.
+  Docker does not expand a glob inside quotes; verify the copy or use the exact JAR
+  name.
+- There is no `HEALTHCHECK`, no non-root user, and no `.dockerignore` in the original
+  repository (one is now provided).
+
+## Heroku (legacy)
+
+`system.properties` sets `java.runtime.version=11`. There is no `Procfile` and no
+`app.json`.
+
+Before deploying to Heroku:
+
+1. Create a PostgreSQL add-on or external database.
+2. Set config vars:
+
+   ```bash
+   heroku config:set SPRING_DATASOURCE_URL='jdbc:postgresql://...' \
+     SPRING_DATASOURCE_USERNAME='...' \
+     SPRING_DATASOURCE_PASSWORD='...'
+   ```
+
+3. Bind to the dyno port. Heroku provides `PORT`, not `SERVER_PORT`. Add
+   `server.port: ${PORT:8080}` to `application.yml` (document the change), or use
+   `SERVER_PORT` only if your platform assigns a fixed port. A static `SERVER_PORT`
+   config var will not follow Heroku's dynamic `PORT`.
+4. Confirm the web process. Heroku's Java buildpack normally builds with Maven and
+   starts the JAR, but the exact default depends on the buildpack version. A `Procfile`
+   such as `web: java $JAVA_OPTS -jar target/mediterraneapp-0.0.1-SNAPSHOT.jar` makes
+   it explicit.
+5. Do not reuse the checked-in database URL or credentials.
+
+Heroku's free PostgreSQL and dyno tiers no longer exist. The configured host is a
+historical artifact and should be treated as dead.
+
+## Production checklist
+
+- [ ] Rotate the database credentials that were committed to Git history.
+- [ ] Provide the datasource through the platform's secret store, not
+  `application.yml`.
+- [ ] Set `spring.jpa.hibernate.ddl-auto=validate` and manage the schema with Flyway or
+  Liquibase.
+- [ ] Disable `show-sql` or route it to a controlled logger.
+- [ ] Add authentication and TLS termination in front of the API.
+- [ ] Add a health endpoint that checks the database if the platform needs one.
+- [ ] Pin and update base images.
+- [ ] Add a CI pipeline that builds and tests every change.
+- [ ] Back up the database and test a restore.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| `UnknownHostException` or connection timeout at startup | The checked-in remote database is gone | Set `SPRING_DATASOURCE_*` to a reachable database |
+| `EncryptionOperationNotPossibleException` | `ENC(...)` value cannot be decrypted | Set `JASYPT_ENCRYPTOR_PASSWORD`, or override the password with plaintext |
+| Build fails downloading `spring-cloud-dependencies:Finchley.M8` with 401 | Old Jasypt 2.0.0 POM | Use the current 3.0.3 dependency (already applied) |
+| `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.6+ |
+| `Port 8080 was already in use` | Another process owns the port | Set `SERVER_PORT` or stop the other process |
+| Tables are missing | Database user cannot create tables, or `ddl-auto` was changed | Grant schema privileges or run migrations |
+| `IncorrectResultSizeDataAccessException` | Duplicate ingredient triples | Deduplicate ingredients and add a unique constraint |
+| Build fails on JDK 17+ | Boot 2.2 is not supported there | Use JDK 11 |

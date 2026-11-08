@@ -1,0 +1,30 @@
+---
+description: Spring Boot recipe API — architecture, API quirks, and safety rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# MediterraneApp
+
+Canonical guidance: [`../../AGENTS.md`](../../AGENTS.md). Read it first; this rule is a
+short pointer.
+
+MediterraneApp is a Spring Boot 2.2 / Java 11 REST API for recipes, backed by
+PostgreSQL. It is a legacy portfolio project: it builds, but has no tests, no CI, no
+authentication, and a checked-in database configuration that points at a retired Heroku
+instance.
+
+- Build with `./mvnw -B -DskipTests package`; test with `./mvnw test` (currently zero
+  tests).
+- The only controller is `RecipeController` at `/recipe`. There is no ingredient
+  endpoint.
+- `POST /recipe` upserts by `name`. `PUT /recipe/{uuid}` requires the same UUID in the
+  body; a missing or different UUID returns 500 and leaves the row unchanged.
+- Never copy the credentials in `src/main/resources/application.yml` into code, docs,
+  commits, or chat. See [`../../SECURITY.md`](../../SECURITY.md).
+- Keep Java 11, Spring Boot 2.2, the hand-written mappers, and the current API shape
+  unless a migration or breaking change is explicitly requested.
+- Update [`../../docs/API.md`](../../docs/API.md) and
+  [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) when behavior changes.
+
+For work in another repository, read that repository's own `AGENTS.md` first.
