@@ -6,9 +6,9 @@ A small REST API for recipes, built with Spring Boot. It stores recipes, their
 ingredients, and their preparation steps in PostgreSQL.
 
 > **Status:** legacy portfolio project from 2020. The code builds and has an automated
-> test suite plus CI, but no authentication, and the checked-in database configuration
-> points at a retired instance. Read [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
-> before deploying or extending it.
+> test suite plus CI, but no authentication, and the database is configured only through
+> environment variables. Read [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) before
+> deploying or extending it.
 
 ## Stack
 
@@ -78,9 +78,9 @@ Tests:
 ```
 
 The suite runs on an in-memory H2 database in PostgreSQL mode, so it needs no
-PostgreSQL server and never touches the checked-in remote database. It covers the
-mappers, the repository, and the full HTTP API (including the documented 500
-responses). CI runs `./mvnw -B verify` on every push and pull request to `main`.
+PostgreSQL server and never touches a remote database. It covers the mappers, the
+repository, and the full HTTP API (including the documented 500 responses). CI runs
+`./mvnw -B verify` on every push and pull request to `main`.
 
 ## Configuration
 
@@ -97,8 +97,8 @@ Spring Boot relaxed binding reads the datasource from the environment:
 See [`.env.example`](.env.example). Spring Boot does not load `.env` automatically;
 export the variables or pass the file to Docker.
 
-The values committed in `src/main/resources/application.yml` are historical and must not
-be reused. See [`SECURITY.md`](SECURITY.md).
+No database credentials are committed. The historical Heroku values remain in Git
+history and must not be reused. See [`SECURITY.md`](SECURITY.md).
 
 ## Docker
 

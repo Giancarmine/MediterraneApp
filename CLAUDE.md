@@ -5,8 +5,8 @@ repository. This file is a short pointer for Claude Code.
 
 MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
 PostgreSQL. The project is a legacy portfolio app: it builds and has a test suite plus
-CI, but no authentication, and a checked-in database configuration that points at a
-retired Heroku instance.
+CI, but no authentication. No database credentials are checked in; supply
+`SPRING_DATASOURCE_*` at runtime.
 
 ## Key facts
 
@@ -19,8 +19,8 @@ retired Heroku instance.
   ingredient endpoint.
 - `POST /recipe` upserts by `name`; `PUT /recipe/{uuid}` requires the same UUID in the
   body. Do not change these semantics without documenting a breaking change.
-- Never copy the credentials in `src/main/resources/application.yml` into another file,
-  a commit, or a response. See [`SECURITY.md`](SECURITY.md).
+- Never add credentials to `src/main/resources/application.yml` or copy them into
+  another file, a commit, or a response. See [`SECURITY.md`](SECURITY.md).
 - Do not upgrade Spring Boot, replace the mappers, or reformat unrelated code as a side
   effect.
 

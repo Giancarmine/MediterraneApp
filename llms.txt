@@ -45,9 +45,9 @@
 
 - The repository is public. Do not add secrets, real `.env` files, Jasypt keys, or
   database credentials.
-- The checked-in database host, username, and `ENC(...)` password are historical and
-  must be treated as compromised. Rotate them before use.
-- Do not run tests or the application against the remote database.
+- No database credentials are checked in; supply `SPRING_DATASOURCE_*` at runtime. The
+  historical Heroku values remain in Git history and must not be reused.
+- Do not point tests or the application at a remote database.
 - See [SECURITY.md](SECURITY.md) before reporting or fixing a credential leak.
 
 ## Optional

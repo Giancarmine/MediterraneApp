@@ -11,8 +11,8 @@ short pointer.
 
 MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
 PostgreSQL. It is a legacy portfolio project: it builds and has a test suite plus CI,
-but no authentication, and a checked-in database configuration that points at a retired
-Heroku instance.
+but no authentication. No database credentials are checked in; supply
+`SPRING_DATASOURCE_*` at runtime.
 
 - Run `./mvnw -B verify` before reporting success; it compiles, runs the H2-backed
   test suite, and packages the JAR. CI runs the same command.
@@ -20,8 +20,8 @@ Heroku instance.
   endpoint.
 - `POST /recipe` upserts by `name`. `PUT /recipe/{uuid}` requires the same UUID in the
   body; a missing or different UUID returns 500 and leaves the row unchanged.
-- Never copy the credentials in `src/main/resources/application.yml` into code, docs,
-  commits, or chat. See [`../../SECURITY.md`](../../SECURITY.md).
+- Never add credentials to `src/main/resources/application.yml` or copy them into code,
+  docs, commits, or chat. See [`../../SECURITY.md`](../../SECURITY.md).
 - Keep Java 17, Spring Boot 4.1, the hand-written mappers, and the current API shape
   unless a migration or breaking change is explicitly requested.
 - Update [`../../docs/API.md`](../../docs/API.md) and
