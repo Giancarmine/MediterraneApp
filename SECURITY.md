@@ -23,13 +23,13 @@ Include:
 - the impact you expect;
 - any suggested fix.
 
-**Do not include real database passwords, Jasypt keys, connection strings with
+**Do not include real database passwords, encryption keys, connection strings with
 credentials, or personal data in the report.** Use placeholders such as
 `jdbc:postgresql://<host>:5432/<db>` and `<password>`.
 
 ## What is in scope
 
-- Leakage or reuse of database credentials, Jasypt keys, or deployment secrets.
+- Leakage or reuse of database credentials, encryption keys, or deployment secrets.
 - Unauthorized access to the recipe API.
 - Injection, unsafe deserialization, or denial-of-service bugs reachable through an
   endpoint.
@@ -58,7 +58,7 @@ current tree. They remain in Git history and in forks, so treat them as compromi
 
 ## If a secret is exposed
 
-1. Revoke or rotate it at the source (database user, Jasypt key, platform secret).
+1. Revoke or rotate it at the source (database user, encryption key, platform secret).
 2. Update every deployment that uses it.
 3. Confirm the service still starts and can reach the database.
 4. Check logs for the old value and remove any cached or generated artifacts that

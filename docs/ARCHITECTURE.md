@@ -36,7 +36,7 @@ recipes, persists recipes and ingredients in PostgreSQL, and has no frontend.
 
 ```text
 src/main/java/com/ges/mediterraneapp/
-├── MediterraneappApplication.java     @SpringBootApplication, @EnableEncryptableProperties
+├── MediterraneappApplication.java     @SpringBootApplication
 ├── controller/
 │   └── RecipeController.java          /recipe endpoints
 ├── service/
@@ -183,9 +183,8 @@ Details:
 - `ddl-auto: update`;
 - a misspelled dialect property.
 
-`@EnableEncryptableProperties` keeps Jasypt support enabled for future `ENC(...)` values,
-using the `jasypt.encryptor.password` property (`JASYPT_ENCRYPTOR_PASSWORD`). No
-`ENC(...)` values are currently configured.
+There is no configuration-encryption layer. Jasypt was removed because no `ENC(...)`
+values are configured and the datasource is supplied through the environment.
 
 At startup Spring Boot creates the datasource from `SPRING_DATASOURCE_*`, Hibernate
 validates/updates the schema, and Tomcat binds port 8080. If the datasource variables are

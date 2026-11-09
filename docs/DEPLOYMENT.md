@@ -63,7 +63,6 @@ to Docker with `--env-file`. Never commit a filled `.env`.
 | `SPRING_DATASOURCE_URL` | none | Yes |
 | `SPRING_DATASOURCE_USERNAME` | none | Yes |
 | `SPRING_DATASOURCE_PASSWORD` | none | Yes |
-| `JASYPT_ENCRYPTOR_PASSWORD` | none | Only if you add an `ENC(...)` value |
 | `SERVER_PORT` | `8080` | No |
 | `JAVA_OPTS` | none | No, used by the Docker `CMD` |
 
@@ -156,8 +155,6 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `UnknownHostException` or connection timeout at startup | No datasource is configured, or it points at the retired host | Set `SPRING_DATASOURCE_*` to a reachable database |
-| `EncryptionOperationNotPossibleException` | `ENC(...)` value cannot be decrypted | Set `JASYPT_ENCRYPTOR_PASSWORD`, or override the password with plaintext |
-| Build fails resolving `jasypt-spring-boot-starter` 3.x with Boot 4 | Jasypt 3.x targets older Spring Boot versions | Use `jasypt-spring-boot-starter` 4.x (already applied) |
 | `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.9+ |
 | `Port 8080 was already in use` | Another process owns the port | Set `SERVER_PORT` or stop the other process |
 | Tables are missing | Database user cannot create tables, or `ddl-auto` was changed | Grant schema privileges or run migrations |

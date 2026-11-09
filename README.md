@@ -16,7 +16,6 @@ ingredients, and their preparation steps in PostgreSQL.
 - Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7)
 - PostgreSQL
 - Lombok (version managed by the Spring Boot BOM)
-- Jasypt Spring Boot 4.0.4 for encrypted configuration values
 - Maven 3.9.16 via the committed wrapper (`./mvnw`)
 
 ## API
@@ -91,7 +90,6 @@ Spring Boot relaxed binding reads the datasource from the environment:
 | `SPRING_DATASOURCE_URL` | JDBC URL |
 | `SPRING_DATASOURCE_USERNAME` | Database user |
 | `SPRING_DATASOURCE_PASSWORD` | Database password |
-| `JASYPT_ENCRYPTOR_PASSWORD` | Key for `ENC(...)` values, if used |
 | `SERVER_PORT` | HTTP port, default `8080` |
 
 See [`.env.example`](.env.example). Spring Boot does not load `.env` automatically;
