@@ -81,7 +81,8 @@ class RecipeMapperTest {
 
     @Test
     void updateModelMapsFieldsAndResolvesIngredients() {
-        UUID uuid = UUID.randomUUID();
+        UUID existingUuid = UUID.randomUUID();
+        UUID bodyUuid = UUID.randomUUID();
         Ingredient resolved = new Ingredient("Egg", "3", "unit");
         resolved.setUuid(UUID.randomUUID());
 
@@ -91,7 +92,7 @@ class RecipeMapperTest {
         ingredientDto.setMeasurement("unit");
 
         RecipeDto dto = new RecipeDto();
-        dto.setUuid(uuid.toString());
+        dto.setUuid(bodyUuid.toString());
         dto.setName("Tortilla");
         dto.setRelations("Spanish");
         dto.setPreparedTime("10m");
@@ -104,9 +105,10 @@ class RecipeMapperTest {
                 .thenReturn(resolved);
 
         Recipe recipe = new Recipe();
+        recipe.setUuid(existingUuid);
         Recipe result = mapper.updateModel(dto, recipe);
 
-        assertThat(result.getUuid()).isEqualTo(uuid);
+        assertThat(result.getUuid()).isEqualTo(existingUuid);
         assertThat(result.getName()).isEqualTo("Tortilla");
         assertThat(result.getRelations()).isEqualTo("Spanish");
         assertThat(result.getPreparedTime()).isEqualTo("10m");

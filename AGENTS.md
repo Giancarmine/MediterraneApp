@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 13 main Java files, about 460 lines, 20 tests |
+| Size | 15 main Java files, about 500 lines, 24 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -37,6 +37,9 @@ consumed.
   value is served as `text/plain` without quotes.
 - The test suite covers the mappers, the repository, and the HTTP API. It runs against
   H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs no database.
+- `ApiExceptionHandler` is the single `@RestControllerAdvice`. It maps
+  `NoSuchElementException` to `404`, and `IllegalArgumentException` plus Bean Validation
+  failures to `400`, using the same error field names as Spring Boot's default body.
 - `src/main/resources/application.yml` contains no database credentials. Supply the
   datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
   application will not start without it.
@@ -189,6 +192,8 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | --- | --- |
 | `src/main/java/com/ges/mediterraneapp/MediterraneappApplication.java` | Spring Boot entry point. |
 | `controller/RecipeController.java` | The only controller. All `/recipe` endpoints. |
+| `controller/ApiExceptionHandler.java` | Global exception mapping to `400`/`404` JSON errors. |
+| `controller/ApiError.java` | Error response body record. |
 | `service/RecipeService.java` | Recipe lookup, create, update, delete. |
 | `service/IngredientService.java` | Ingredient lookup, create, update, delete. No controller exposes it yet. |
 | `mapper/RecipeMapper.java` | Entity/DTO mapping, including resolving ingredient DTOs to entities. |
@@ -202,7 +207,8 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `model/dto/IngredientDto.java` | JSON shape for ingredients; `NON_NULL` inclusion. |
 | `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate settings. |
 
-There is no `IngredientController`, no service interfaces, and no `@ControllerAdvice`.
+There is no `IngredientController` and no service interfaces. `ApiExceptionHandler` is
+the only `@RestControllerAdvice`.
 
 ### Request flow
 
@@ -210,9 +216,9 @@ There is no `IngredientController`, no service interfaces, and no `@ControllerAd
 2. `RecipeController` calls `RecipeService` to load or create the entity.
 3. `RecipeMapper.updateModel` copies fields and resolves each `IngredientDto` through
    `IngredientService.findIngredientByNameAndAmountAndMeasurement`. A missing ingredient
-   becomes a new transient `Ingredient`.
+   becomes a new transient `Ingredient`. It never changes the entity UUID.
 4. `RecipeService` saves the entity. `CascadeType.ALL` on the ingredient relation
-   persists new ingredients and join rows.
+   persists new ingredients and join rows. Validation runs before this step.
 5. `RecipeMapper.toDto` converts the saved entity back to JSON.
 
 Reads are simpler: controller → service → repository → mapper → DTO.
@@ -265,21 +271,22 @@ All paths are under `/recipe`. Full payloads and status codes are in
 | --- | --- | --- |
 | `GET` | `/recipe/status` | Returns `"I_AM_A_TEAPOT"` as a JSON string with HTTP 200. |
 | `GET` | `/recipe` | Returns every recipe. |
-| `GET` | `/recipe/{uuid}` | Returns one recipe, or 500 when absent. |
-| `POST` | `/recipe` | Creates a recipe, or updates an existing one with the same `name`. |
+| `GET` | `/recipe/{uuid}` | Returns one recipe, or 404 when absent and 400 for an invalid UUID. |
+| `POST` | `/recipe` | Creates a recipe (201) or updates an existing one with the same `name` (200). |
 | `POST` | `/recipe/bulk` | Creates/updates each item, returns `"CREATED"` with HTTP 200. |
-| `PUT` | `/recipe/{uuid}` | Updates a recipe; the body should repeat the path UUID. |
+| `PUT` | `/recipe/{uuid}` | Updates a recipe. The path UUID is authoritative; a body UUID is optional and must match. |
 | `DELETE` | `/recipe/{uuid}` | Deletes a recipe, returns `"OK"` with HTTP 200. |
 
-Current quirks that must be preserved unless the owner asks for a breaking change:
+Current behavior that must be preserved unless the owner asks for a breaking change:
 
-- `POST /recipe` upserts by `name`, not by UUID.
-- `PUT /recipe/{uuid}` maps `RecipeDto.uuid` onto the entity. A missing or mismatched
-  body UUID makes Hibernate throw `identifier ... was altered` and the request returns
-  500. Always send the path UUID in the body.
-- `@Valid` is present but the DTOs have no constraint annotations, so it is a no-op.
-- Missing rows surface as `NoSuchElementException` and Spring's default 500 response.
-- Invalid UUID strings throw `IllegalArgumentException` and also surface as 500.
+- `POST /recipe` upserts by `name`, not by UUID. It returns `201 Created` on create and
+  `200 OK` on update.
+- `PUT /recipe/{uuid}` keeps the loaded entity's UUID. The body `uuid` is optional; a
+  mismatch returns `400 Bad Request` and leaves the row unchanged.
+- `@NotBlank` on `RecipeDto.name` and `IngredientDto.nameIngredient` makes `@Valid`
+  effective. Violations return `400 Bad Request`.
+- Missing rows throw `NoSuchElementException`, mapped to `404 Not Found`. Invalid UUID
+  strings throw `IllegalArgumentException`, mapped to `400 Bad Request`.
 - `DELETE /recipe/{uuid}` cascades `REMOVE` to ingredients. An ingredient shared with
   another recipe causes a foreign-key violation and a 500 response that rolls back the
   delete.
@@ -303,8 +310,9 @@ Current quirks that must be preserved unless the owner asks for a breaking chang
 - **Repositories:** Spring Data derived queries; no JPQL or native SQL yet.
 - **Controllers:** constructor injection is preferred for new code. The existing
   `@Autowired` fields in `RecipeController` are redundant but harmless.
-- **Errors:** if you add exception handling, add one `@RestControllerAdvice` with
-  explicit status mappings; do not add try/catch blocks to each endpoint.
+- **Errors:** keep exception handling in `ApiExceptionHandler`, the single
+  `@RestControllerAdvice`; do not add try/catch blocks to each endpoint. Add new mappings
+  there and document the resulting status codes.
 - **JSON naming:** camelCase, matching the DTO fields. Do not add snake_case aliases.
 
 ## Testing
@@ -314,15 +322,17 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (20 tests):
+Current coverage (24 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
-  null-collection behavior, and ingredient resolution.
+  null-collection behavior, ingredient resolution, and the rule that `updateModel` never
+  rewrites the entity UUID.
 - `model/dao/repository/RecipeRepositoryTest` — `@DataJpaTest` lookups by UUID and name.
 - `RecipeApiIntegrationTest` — full HTTP behavior with `@SpringBootTest(RANDOM_PORT)`
-  and `TestRestTemplate`, so 500 responses go through the real error dispatch. It covers
-  status, create, list, get, missing/invalid UUID, bulk, upsert-by-name, PUT, PUT UUID
-  mismatch, delete, and shared-ingredient rollback.
+  and `TestRestTemplate`, so error responses go through the real error dispatch. It
+  covers status, create, list, get, missing row (404), invalid UUID (400), bulk,
+  upsert-by-name (200 on update), validation (400), PUT with matching/omitted/mismatched
+  UUID, delete, and shared-ingredient rollback (500).
 
 Guidance:
 
@@ -330,7 +340,7 @@ Guidance:
   `RecipeApiIntegrationTest` aligned with [`docs/API.md`](docs/API.md).
 - Use `@DataJpaTest` for repositories and unit tests for the hand-written mappers.
 - Use the real servlet container (`RANDOM_PORT`), not `MockMvc`, when asserting error
-  responses: `MockMvc` rethrows unhandled exceptions instead of rendering the 500 body.
+  responses: `MockMvc` rethrows unhandled exceptions instead of rendering the error body.
 - Keep `spring.jpa.open-in-view` at its production default. Disabling it for tests
   triggers `LazyInitializationException` and detached-entity errors that production does
   not have.
@@ -343,8 +353,8 @@ Guidance:
 - No endpoint has authentication or authorization. Do not expose this API publicly
   without adding both.
 - No CORS configuration exists. Add it explicitly if a browser client is introduced.
-- Input is not validated despite `@Valid`. Add Bean Validation constraints to the DTOs
-  (and a handler for `MethodArgumentNotValidException`) when hardening the API.
+- Input validation is limited to `@NotBlank` on recipe and ingredient names. Add further
+  constraints deliberately and document the new `400` responses.
 - Never log request bodies blindly; they can contain data that should not be retained.
 - Do not commit `.env`, keystores, or real database credentials. `.gitignore`
   excludes `.env`; `.env.example` contains placeholders only.
@@ -356,11 +366,11 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. Missing rows return 500 instead of 404.
-3. Validation is a no-op.
-4. `POST`/`PUT` UUID and upsert semantics are surprising.
-5. `StepRepository` is unused and malformed.
-6. Dockerfile relies on a wildcard copy for the packaged JAR.
+2. `DELETE` of a recipe with a shared ingredient returns 500 and rolls back.
+3. `StepRepository` is unused and malformed.
+4. Dockerfile relies on a wildcard copy for the packaged JAR.
+5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
+   needs a migration plan.
 
 ## Change workflow
 

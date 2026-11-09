@@ -14,9 +14,10 @@ Key points:
   test suite, and packages the JAR. CI runs the same command.
 - The only controller is `RecipeController` at `/recipe`. There is no ingredient
   endpoint.
-- `POST /recipe` upserts by `name`. `PUT /recipe/{uuid}` requires the same UUID in the
-  body; a missing or different UUID returns 500 and leaves the row unchanged. Preserve
-  these semantics unless a breaking change is explicitly requested.
+- `POST /recipe` upserts by `name` and returns `201` on create, `200` on update.
+  `PUT /recipe/{uuid}` treats the path UUID as authoritative; an optional body UUID must
+  match or the request returns `400` and leaves the row unchanged. Preserve these
+  semantics unless a breaking change is explicitly requested.
 - Never add credentials to `src/main/resources/application.yml` or copy them into code,
   docs, tests, commits, or chat. See [`../SECURITY.md`](../SECURITY.md).
 - Keep the existing Java 25 (LTS) / Spring Boot 4.1 stack, hand-written mappers, and API

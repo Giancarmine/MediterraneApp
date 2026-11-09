@@ -42,8 +42,8 @@ Docker instructions.
 2. Keep the diff focused. Do not reformat unrelated files or upgrade dependencies as a
    side effect.
 3. Preserve the existing API behavior unless the change is explicitly a breaking one.
-   `POST /recipe` upserts by `name`; `PUT /recipe/{uuid}` expects the same UUID in the
-   body.
+   `POST /recipe` upserts by `name` (201 on create, 200 on update); `PUT /recipe/{uuid}`
+   treats the path UUID as authoritative and rejects a mismatched body UUID with 400.
 4. Add or update tests when practical. The suite lives under `src/test/java`; see the
    testing section of [`AGENTS.md`](AGENTS.md).
 5. Update the owning documentation:

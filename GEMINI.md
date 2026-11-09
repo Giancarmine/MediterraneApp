@@ -17,8 +17,9 @@ CI, but no authentication. No database credentials are checked in; supply
   `SPRING_DATASOURCE_PASSWORD`.
 - The only controller is `RecipeController`, mounted at `/recipe`. There is no
   ingredient endpoint.
-- `POST /recipe` upserts by `name`; `PUT /recipe/{uuid}` requires the same UUID in the
-  body. Do not change these semantics without documenting a breaking change.
+- `POST /recipe` upserts by `name` (201 on create, 200 on update); `PUT /recipe/{uuid}`
+  treats the path UUID as authoritative and rejects a mismatched body UUID with 400. Do
+  not change these semantics without documenting a breaking change.
 - Never add credentials to `src/main/resources/application.yml` or copy them into
   another file, a commit, or a response. See [`SECURITY.md`](SECURITY.md).
 - Do not upgrade Spring Boot, replace the mappers, or reformat unrelated code as a side

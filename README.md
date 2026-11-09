@@ -78,8 +78,9 @@ Tests:
 
 The suite runs on an in-memory H2 database in PostgreSQL mode, so it needs no
 PostgreSQL server and never touches a remote database. It covers the mappers, the
-repository, and the full HTTP API (including the documented 500 responses). CI runs
-`./mvnw -B verify` on every push and pull request to `main`.
+repository, and the full HTTP API, including the `400`/`404` error mappings and the
+shared-ingredient `500` rollback. CI runs `./mvnw -B verify` on every push and pull
+request to `main`.
 
 ## Configuration
 

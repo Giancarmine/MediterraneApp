@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @Slf4j
@@ -23,7 +24,7 @@ public class RecipeService {
 
     public Recipe findRecipeByUuid (String uuid) {
         return recipeRepository.findByUuid(UUID.fromString(uuid))
-                .orElseThrow();
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + uuid));
     };
 
     public Recipe findRecipeByName (String name) {

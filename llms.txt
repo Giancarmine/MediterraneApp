@@ -35,11 +35,14 @@
 
 - `GET /recipe/status` -> HTTP 200 body `"I_AM_A_TEAPOT"`.
 - `GET /recipe` -> all recipes.
-- `GET /recipe/{uuid}` -> one recipe, 500 if absent.
-- `POST /recipe` -> create or update by `name`, 201.
+- `GET /recipe/{uuid}` -> one recipe; 404 if absent, 400 for an invalid UUID.
+- `POST /recipe` -> create or update by `name`; 201 on create, 200 on update.
 - `POST /recipe/bulk` -> batch create/update, HTTP 200 body `"CREATED"`.
-- `PUT /recipe/{uuid}` -> update; send the same UUID in the body.
-- `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`.
+- `PUT /recipe/{uuid}` -> update; the path UUID is authoritative, an optional body UUID
+  must match (otherwise 400).
+- `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`; 404 if absent.
+- Errors use `timestamp`, `status`, `error`, `message`, and `path`; validation failures
+  are 400.
 
 ## Safety
 

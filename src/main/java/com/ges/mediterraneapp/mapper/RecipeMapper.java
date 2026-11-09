@@ -8,7 +8,6 @@ import com.ges.mediterraneapp.service.IngredientService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Set;
-import java.util.UUID;
 
 import static java.util.stream.Collectors.toSet;
 
@@ -49,7 +48,6 @@ public class RecipeMapper {
     }
 
     public Recipe updateModel(RecipeDto recipeDto, Recipe recipe) {
-        recipe.setUuid(recipeDto.getUuid() != null ? UUID.fromString(recipeDto.getUuid()) : null);
         recipe.setName(recipeDto.getName());
         recipe.setRelations(recipeDto.getRelations());
         recipe.setPreparedTime(recipeDto.getPreparedTime());
