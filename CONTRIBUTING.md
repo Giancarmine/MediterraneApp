@@ -12,7 +12,7 @@ should stay focused and easy to review.
 
 ## Setup
 
-Prerequisites: JDK 11 and PostgreSQL 12+. The Maven wrapper is committed; do not replace
+Prerequisites: JDK 17 and PostgreSQL 12+. The Maven wrapper is committed; do not replace
 it with a system Maven in build instructions.
 
 ```bash
@@ -73,7 +73,7 @@ rationale in the pull request or the relevant document.
 
 ## Code style
 
-- Java 11, 4-space indentation, LF line endings, final newline.
+- Java 17, 4-space indentation, LF line endings, final newline.
 - Follow the existing package layout: `controller`, `service`, `mapper`, `model.dao`,
   `model.dao.repository`, `model.dto`.
 - Use Lombok for entities and DTOs; do not add boilerplate accessors.

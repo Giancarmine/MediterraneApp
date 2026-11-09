@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,8 +32,10 @@ public class RecipeController {
     }
 
     @GetMapping("/status")
-    public HttpStatus status() {
-        return HttpStatus.I_AM_A_TEAPOT;
+    public String status() {
+        // Jackson 3 serializes enums with toString() ("418 I_AM_A_TEAPOT"); the public
+        // API has always returned the enum name, so build the body explicitly.
+        return HttpStatus.I_AM_A_TEAPOT.name();
     }
 
     @GetMapping
@@ -59,9 +61,9 @@ public class RecipeController {
     }
 
     @PostMapping("/bulk")
-    public HttpStatus createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
+    public String createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
         recipes.forEach(this::createRecipe);
-        return HttpStatus.CREATED;
+        return HttpStatus.CREATED.name();
     }
 
     @PutMapping("/{uuid}")
@@ -72,8 +74,8 @@ public class RecipeController {
     }
 
     @DeleteMapping("/{uuid}")
-    public HttpStatus deleteRecipe (@PathVariable String uuid) {
+    public String deleteRecipe (@PathVariable String uuid) {
         recipeService.deleteRecipe(uuid);
-        return HttpStatus.OK;
+        return HttpStatus.OK.name();
     }
 }

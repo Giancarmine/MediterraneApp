@@ -3,7 +3,7 @@
 The canonical guidance for this repository is [`../AGENTS.md`](../AGENTS.md). Read it
 first; this file is only a short pointer.
 
-MediterraneApp is a **Spring Boot 2.2 / Java 11 REST API for recipes**, backed by
+MediterraneApp is a **Spring Boot 4.1 / Java 17 REST API for recipes**, backed by
 PostgreSQL. It is a legacy portfolio project: it builds, but has no tests, no CI, no
 authentication, and a checked-in database configuration that points at a retired Heroku
 instance.
@@ -19,7 +19,7 @@ Key points:
   these semantics unless a breaking change is explicitly requested.
 - Never copy the credentials from `src/main/resources/application.yml` into code,
   docs, tests, commits, or chat. See [`../SECURITY.md`](../SECURITY.md).
-- Keep the existing Java 11 / Spring Boot 2.2 stack, hand-written mappers, and API
+- Keep the existing Java 17 / Spring Boot 4.1 stack, hand-written mappers, and API
   shape unless the owner asks for a migration.
 - Run `./mvnw -B -DskipTests package` and `git diff --check` before reporting success.
   Do not claim a check passed unless it was run.

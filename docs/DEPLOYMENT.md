@@ -7,8 +7,8 @@ needs fresh credentials.
 
 ## Prerequisites
 
-- JDK 11 (the POM targets Java 11).
-- Maven is not required separately: the committed wrapper downloads Maven 3.6.3.
+- JDK 17 (the POM targets Java 17).
+- Maven is not required separately: the committed wrapper downloads Maven 3.9.16.
 - PostgreSQL for a real run (12 or newer recommended). The schema is created by Hibernate.
 - Docker is optional.
 
@@ -95,22 +95,21 @@ or a Docker network that contains both containers.
 
 The Dockerfile is a two-stage build:
 
-1. `maven:3-jdk-11` runs `mvn clean install` inside the image.
-2. `openjdk:11-jdk` copies the fat JAR and runs it with `JAVA_OPTS`.
+1. `maven:3.9-eclipse-temurin-17` runs `mvn clean install` inside the image.
+2. `eclipse-temurin:17-jre` copies the fat JAR and runs it with `JAVA_OPTS`.
 
 Known weaknesses (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
 
-- Both base images are EOL and may fail to pull. Prefer
-  `maven:3.9-eclipse-temurin-11` and `eclipse-temurin:11-jre`.
-- `COPY --from=0 "MediterraneApp/target/*.jar" app.jar` wraps the wildcard in quotes.
-  Docker does not expand a glob inside quotes; verify the copy or use the exact JAR
-  name.
+- The images are current Temurin 17 tags, but they are not pinned to a digest.
+- `COPY --from=build "MediterraneApp/target/*.jar" app.jar` wraps the wildcard in
+  quotes. Docker does not expand a glob inside quotes; verify the copy or use the exact
+  JAR name.
 - There is no `HEALTHCHECK`, no non-root user, and no `.dockerignore` in the original
   repository (one is now provided).
 
 ## Heroku (legacy)
 
-`system.properties` sets `java.runtime.version=11`. There is no `Procfile` and no
+`system.properties` sets `java.runtime.version=17`. There is no `Procfile` and no
 `app.json`.
 
 Before deploying to Heroku:
@@ -157,9 +156,9 @@ historical artifact and should be treated as dead.
 | --- | --- | --- |
 | `UnknownHostException` or connection timeout at startup | The checked-in remote database is gone | Set `SPRING_DATASOURCE_*` to a reachable database |
 | `EncryptionOperationNotPossibleException` | `ENC(...)` value cannot be decrypted | Set `JASYPT_ENCRYPTOR_PASSWORD`, or override the password with plaintext |
-| Build fails downloading `spring-cloud-dependencies:Finchley.M8` with 401 | Old Jasypt 2.0.0 POM | Use the current 3.0.3 dependency (already applied) |
-| `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.6+ |
+| Build fails resolving `jasypt-spring-boot-starter` 3.x with Boot 4 | Jasypt 3.x targets older Spring Boot versions | Use `jasypt-spring-boot-starter` 4.x (already applied) |
+| `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.9+ |
 | `Port 8080 was already in use` | Another process owns the port | Set `SERVER_PORT` or stop the other process |
 | Tables are missing | Database user cannot create tables, or `ddl-auto` was changed | Grant schema privileges or run migrations |
 | `IncorrectResultSizeDataAccessException` | Duplicate ingredient triples | Deduplicate ingredients and add a unique constraint |
-| Build fails on JDK 17+ | Boot 2.2 is not supported there | Use JDK 11 |
+| Build fails on JDK 11 or older | Boot 4 and the POM require Java 17 | Build with JDK 17 |
