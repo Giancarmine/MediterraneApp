@@ -9,11 +9,11 @@ changing code.
 | Field | Value |
 | --- | --- |
 | What it is | REST API for recipes, their ingredients, and preparation steps |
-| Language | Java 11 |
-| Framework | Spring Boot 2.2.6 (Spring MVC, Spring Data JPA, Hibernate 5.4) |
-| Build | Maven via the committed wrapper (`./mvnw`, Maven 3.6.3) |
+| Language | Java 17 |
+| Framework | Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7.4) |
+| Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
-| Libraries | Lombok 1.18.12, Jasypt Spring Boot 3.0.3, Jackson |
+| Libraries | Lombok 1.18.48 (Boot BOM), Jasypt Spring Boot 4.0.4, Jackson 3 |
 | Size | 13 Java files, about 460 lines, no tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
@@ -24,9 +24,12 @@ consumed.
 
 ## Current state
 
-- `./mvnw clean package` succeeds on JDK 11 after bumping
-  `jasypt-spring-boot-starter` to 3.0.3. The old 2.0.0 POM referenced an authenticated
-  Spring milestone repository and no longer resolves.
+- `./mvnw clean package` succeeds on JDK 17 with Spring Boot 4.1.2 and Jasypt
+  4.0.4. The upgrade from Boot 2.2.6 moved `javax.*` imports to `jakarta.*` and added
+  `spring-boot-starter-validation`, which Boot 4 no longer pulls in transitively.
+- Jackson 3 serializes enums with `toString()`, so the controller returns
+  `HttpStatus.*.name()` explicitly to keep the historical response bodies
+  (`"I_AM_A_TEAPOT"`, `"CREATED"`, `"OK"`). Do not remove those `.name()` calls.
 - There are no tests. `./mvnw test` succeeds with "No tests to run".
 - `src/main/resources/application.yml` still points at a retired Heroku PostgreSQL
   instance and contains a Jasypt-encrypted password. The application will not start
@@ -50,9 +53,9 @@ See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
    must be called out explicitly.
 4. **Make the smallest change that solves the problem.** Do not reformat unrelated
    files, rename packages, or upgrade the framework as a side effect.
-5. **Stay on Java 11 and Spring Boot 2.2.x** unless the owner explicitly asks for a
-   migration. A Boot 3 upgrade requires `javax.*` to `jakarta.*` changes and is a
-   separate project.
+5. **Stay on Java 17 and Spring Boot 4.1.x** unless the owner explicitly asks for a
+   migration. The code uses the `jakarta.*` namespace; do not reintroduce `javax.*`
+   imports.
 6. **Do not reintroduce MapStruct.** The Git history contains abandoned MapStruct
    commits; the current code uses hand-written mappers. Keep it that way unless asked.
 7. **Do not add `@Transactional` blindly** but do add it to service methods that write
@@ -79,11 +82,11 @@ Before changing anything, read:
 
 ## Quick start
 
-Prerequisites: JDK 11 and network access for the Maven wrapper and dependencies.
+Prerequisites: JDK 17 and network access for the Maven wrapper and dependencies.
 PostgreSQL is required to actually start the application (12+ recommended).
 
 ```bash
-# Compile and package (verified on Temurin 11.0.33)
+# Compile and package (verified on Temurin 17.0.21)
 ./mvnw -B clean package
 
 # Run the test suite (currently zero tests)
@@ -131,8 +134,8 @@ docker run --rm -p 8080:8080 \
   mediterraneapp
 ```
 
-The Dockerfile uses EOL base images (`maven:3-jdk-11`, `openjdk:11-jdk`); see
-[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md).
+The Dockerfile builds with `maven:3.9-eclipse-temurin-17` and runs on
+`eclipse-temurin:17-jre`.
 
 ## Configuration
 
@@ -341,7 +344,7 @@ The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Hi
 5. Validation is a no-op.
 6. `POST`/`PUT` UUID and upsert semantics are surprising.
 7. `StepRepository` is unused and malformed.
-8. Dockerfile uses EOL images and a fragile copy glob.
+8. Dockerfile relies on a wildcard copy for the packaged JAR.
 
 ## Change workflow
 

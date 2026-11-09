@@ -7,7 +7,7 @@ recipes, persists recipes and ingredients in PostgreSQL, and has no frontend.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Spring Boot 2.2.6 (embedded Tomcat, port 8080)               │
+│ Spring Boot 4.1.2 (embedded Tomcat 11, port 8080)            │
 │                                                              │
 │  RecipeController                                            │
 │    │  RecipeDto / IngredientDto                              │
@@ -19,7 +19,7 @@ recipes, persists recipes and ingredients in PostgreSQL, and has no frontend.
 │    │                        │                                │
 │    └──────────┬─────────────┘                                │
 │               ▼                                              │
-│         Hibernate 5.4 / HikariCP                             │
+│         Hibernate 7.4 / HikariCP                             │
 └───────────────┬──────────────────────────────────────────────┘
                 ▼
           PostgreSQL
@@ -90,7 +90,7 @@ There is no transaction annotation. Each repository call runs in its own transac
 
 ### Create or update a recipe
 
-1. Jackson deserializes the body into `RecipeDto`.
+1. Jackson 3 deserializes the body into `RecipeDto`.
 2. `RecipeController.createRecipe` calls `RecipeService.findRecipeByName`.
    - A miss returns `new Recipe()` rather than an empty `Optional`.
    - A hit returns the existing entity.
@@ -220,7 +220,7 @@ Safe, additive work:
 
 Changes that need an explicit decision:
 
-- Upgrading Spring Boot (2.2 → 3.x requires Jakarta namespace changes).
+- Upgrading or downgrading Spring Boot (the code uses the `jakarta.*` namespace).
 - Changing the upsert key from `name` to `uuid`.
 - Reducing the ingredient cascade (data migration implications).
 - Adding authentication or a browser frontend.

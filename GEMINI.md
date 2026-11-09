@@ -3,7 +3,7 @@
 **Read [`AGENTS.md`](AGENTS.md) first.** It is the canonical contract for this
 repository. This file is a short pointer for Gemini CLI.
 
-MediterraneApp is a Spring Boot 2.2 / Java 11 REST API for recipes, backed by
+MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
 PostgreSQL. The project is a legacy portfolio app: it builds, but has no tests, no CI,
 no authentication, and a checked-in database configuration that points at a retired
 Heroku instance.

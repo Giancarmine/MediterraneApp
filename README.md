@@ -10,12 +10,12 @@ ingredients, and their preparation steps in PostgreSQL.
 
 ## Stack
 
-- Java 11
-- Spring Boot 2.2.6 (Spring MVC, Spring Data JPA, Hibernate)
+- Java 17
+- Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7)
 - PostgreSQL
-- Lombok
-- Jasypt Spring Boot for encrypted configuration values
-- Maven (`./mvnw`)
+- Lombok (version managed by the Spring Boot BOM)
+- Jasypt Spring Boot 4.0.4 for encrypted configuration values
+- Maven 3.9.16 via the committed wrapper (`./mvnw`)
 
 ## API
 
@@ -42,7 +42,7 @@ curl -s http://localhost:8080/recipe/status
 
 ## Run locally
 
-You need JDK 11 and PostgreSQL. The committed wrapper downloads Maven 3.6.3.
+You need JDK 17 and PostgreSQL. The committed wrapper downloads Maven 3.9.16.
 
 ```bash
 docker run --rm --name mediterraneapp-db \
@@ -106,7 +106,8 @@ docker run --rm -p 8080:8080 \
   mediterraneapp
 ```
 
-The Dockerfile uses end-of-life base images; see the deployment notes.
+The Dockerfile uses `maven:3.9-eclipse-temurin-17` to build and
+`eclipse-temurin:17-jre` to run.
 
 ## Documentation
 

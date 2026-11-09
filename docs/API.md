@@ -6,7 +6,8 @@ authentication, versioning, or ingredient endpoint.
 - **Base URL (local):** `http://localhost:8080`
 - **Content type:** `application/json`
 - **Authentication:** none
-- **Error format:** Spring Boot's default error JSON
+- **Error format:** Spring Boot's default error JSON, with `message` enabled and an
+  ISO-8601 `timestamp`
 
 This document describes the code as it exists, including its quirks. See
 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) before relying on any behavior in production.
@@ -70,8 +71,10 @@ Content-Type: application/json
 "I_AM_A_TEAPOT"
 ```
 
-The method returns `HttpStatus.I_AM_A_TEAPOT` from a `@RestController`, so Spring
-serializes the enum name as the response body. It does **not** return HTTP 418.
+The method returns `HttpStatus.I_AM_A_TEAPOT.name()` from a `@RestController`, so the
+response body is the plain string `I_AM_A_TEAPOT`. It does **not** return HTTP 418. The
+`.name()` call is deliberate: Jackson 3 would otherwise serialize the enum with
+`toString()` and produce `"418 I_AM_A_TEAPOT"`.
 
 ### `GET /recipe`
 
@@ -175,8 +178,8 @@ Content-Type: application/json
 "CREATED"
 ```
 
-The method returns `HttpStatus.CREATED` from a `@RestController`, so the status stays
-`200` and the enum name is written to the body. There is no transaction around the
+The method returns `HttpStatus.CREATED.name()` from a `@RestController`, so the status
+stays `200` and `CREATED` is written to the body. There is no transaction around the
 loop: if item 3 fails, items 1 and 2 remain saved.
 
 ### `PUT /recipe/{uuid}`
@@ -240,7 +243,7 @@ default error handling. A missing recipe typically produces:
 
 ```json
 {
-  "timestamp": "2026-11-08T01:00:00.000+0000",
+  "timestamp": "2026-11-09T14:10:23.026Z",
   "status": 500,
   "error": "Internal Server Error",
   "message": "No value present",
@@ -248,9 +251,11 @@ default error handling. A missing recipe typically produces:
 }
 ```
 
-Do not build clients that depend on the exact `message` text. If you add error
-handling, map `NoSuchElementException` to `404` and `IllegalArgumentException` to `400`
-in one `@RestControllerAdvice`.
+Do not build clients that depend on the exact `message` text.
+`spring.web.error.include-message: always` in `application.yml` preserves the pre-upgrade
+payload (Boot 2.2 included the message by default); remove it if leaking exception text
+is a concern. If you add error handling, map `NoSuchElementException` to `404` and
+`IllegalArgumentException` to `400` in one `@RestControllerAdvice`.
 
 ## Compatibility rules for agents
 

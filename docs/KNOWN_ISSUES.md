@@ -25,18 +25,18 @@ Severity:
 | DEV-1 | P1 | No tests | Open |
 | DEV-2 | P1 | No CI | Open |
 | DEV-3 | P3 | Maven wrapper was incomplete | **Fixed** |
-| DEV-4 | P1 | Jasypt 2.0.0 no longer resolves | **Fixed** |
+| DEV-4 | P1 | Jasypt 2.0.0 could not be resolved | **Fixed** |
 | CODE-1 | P2 | `StepRepository` is malformed and unused | Open |
 | DATA-2 | P2 | Ingredient triple has no unique constraint | Open |
 | DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
-| OPS-2 | P2 | Dockerfile uses EOL images and a fragile copy | Open |
+| OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | Open |
 | OPS-3 | P2 | No auth, CORS, actuator, or rate limiting | Open |
 | API-5 | P2 | No pagination on `GET /recipe` | Open |
 | API-6 | P2 | `POST /recipe/bulk` is not transactional | Open |
 | CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | Open |
 | DEV-5 | P2 | Mapper is constructed manually in the controller | Open |
 | DEV-6 | P3 | `@Autowired` on final fields is redundant | Open |
-| REPO-1 | P3 | `mediterraneapp.iml` is tracked | Open |
+| REPO-1 | P3 | `mediterraneapp.iml` was tracked | **Fixed** |
 | REPO-2 | P3 | `HELP.md` is stale generated output | Open |
 | REPO-3 | P3 | Trailing-dot Maven `groupId` | Open |
 
@@ -193,19 +193,20 @@ for repository tests. Do not point tests at a real database.
 
 **Evidence:** no `.github/workflows` directory.
 
-**Fix:** add a workflow that runs `./mvnw -B verify` on JDK 11 for pushes and pull
+**Fix:** add a workflow that runs `./mvnw -B verify` on JDK 17 for pushes and pull
 requests. Add dependency and container scanning once the build is stable. Keep the
 checked-in wrapper and use `./mvnw`, not a system Maven.
 
-### DEV-4 — Jasypt 2.0.0 no longer resolves
+### DEV-4 — Jasypt dependency was unbuildable
 
-**Evidence:** building the original POM fails while reading
-`jasypt-spring-boot-starter:2.0.0`, because its POM imports
+**Evidence:** building the original POM failed while reading
+`jasypt-spring-boot-starter:2.0.0`, because its POM imported
 `spring-cloud-dependencies:Finchley.M8` from `repo.spring.io/libs-milestone`, which now
 returns `401 Unauthorized`.
 
-**Fix applied:** bumped the dependency to `3.0.3`. `./mvnw -B -DskipTests package`
-succeeds on Temurin 11.0.33.
+**Fix applied:** the dependency now tracks `jasypt-spring-boot-starter:4.0.4`, which is
+the line that supports Spring Boot 4. `./mvnw -B -DskipTests package` succeeds on
+Temurin 17.0.21.
 
 Keep the Jasypt version current. If a future version changes property names or
 encryption defaults, update this document and the configuration notes.
@@ -243,19 +244,18 @@ changes are not applied. Not suitable for production.
 **Fix:** add Flyway or Liquibase, write a baseline migration for the current schema,
 then switch to `ddl-auto: validate`. Test migrations against a copy of real data.
 
-### OPS-2 — Dockerfile uses EOL images and a fragile copy
+### OPS-2 — Dockerfile uses a fragile wildcard copy
 
 **Evidence:**
 
-- `FROM maven:3-jdk-11` and `FROM openjdk:11-jdk` are EOL.
-- `COPY --from=0 "MediterraneApp/target/*.jar" app.jar` quotes a wildcard; Docker does
-  not expand globs inside quotes.
+- `COPY --from=build "MediterraneApp/target/*.jar" app.jar` quotes a wildcard; Docker
+  does not expand globs inside quotes.
 - The build stage runs `mvn clean install` without skipping tests.
 - No `HEALTHCHECK`, no non-root user.
 
-**Fix:** use `maven:3.9-eclipse-temurin-11` and `eclipse-temurin:11-jre`, copy the exact
-JAR or unquoted glob, add a non-root user, and add a health check. Build with the
-committed wrapper (`./mvnw`) for reproducibility. Add the provided `.dockerignore`.
+**Fix:** copy the exact JAR or an unquoted glob, add a non-root user, and add a health
+check. Build with the committed wrapper (`./mvnw`) for reproducibility. The provided
+`.dockerignore` keeps `target/` and IDE state out of the build context.
 
 ### OPS-3 — No auth, CORS, actuator, or rate limiting
 
@@ -328,7 +328,7 @@ and remove the `@Autowired` field. Do this together with tests.
 `.mvn/wrapper/maven-wrapper.properties`, so `./mvnw` failed before Maven started.
 
 **Fix applied:** regenerated the script-only wrapper with Maven Wrapper 3.3.4 and Maven
-3.6.3. `./mvnw -v` and `./mvnw -B -DskipTests package` now work.
+3.9.16. `./mvnw -v` and `./mvnw -B -DskipTests package` now work.
 
 ### DEV-6 — `@Autowired` on final fields is redundant
 
@@ -338,18 +338,18 @@ constructor. Constructor injection already satisfies the dependency.
 **Fix:** remove the annotations when touching the class. Do not perform a broad
 formatting-only change.
 
-### REPO-1 — `mediterraneapp.iml` is tracked
+### REPO-1 — `mediterraneapp.iml` was tracked
 
-**Evidence:** the IntelliJ module file is committed even though `.gitignore` lists
+**Evidence:** the IntelliJ module file was committed even though `.gitignore` lists
 `*.iml` (tracked files are not affected by ignore rules).
 
-**Fix:** `git rm --cached mediterraneapp.iml` and commit the removal. Keep the file
-ignored for local use.
+**Fix applied:** removed the file. `.gitignore` still ignores `*.iml`; regenerate it
+locally if needed.
 
 ### REPO-2 — `HELP.md` is stale generated output
 
-**Evidence:** Spring Initializr generated `HELP.md`, which points at the Spring Boot
-2.2.6 Maven plugin documentation and adds nothing beyond [`README.md`](../README.md).
+**Evidence:** Spring Initializr generated `HELP.md`, which points at old Spring Boot
+documentation and adds nothing beyond [`README.md`](../README.md).
 
 **Fix:** delete it, or regenerate it if the project is upgraded. Do not treat it as
 project documentation.
@@ -365,9 +365,12 @@ coordinates and any dependency references.
 
 ## Verification notes
 
-- Build verified with Temurin 11.0.33 and Maven Wrapper 3.6.3:
+- Build verified with Temurin 17.0.21 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
 - `./mvnw test` → `No tests to run`, `BUILD SUCCESS`.
+- Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
+  the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. The controller returns
+  `HttpStatus.*.name()` to keep the historical strings.
 - API behavior was smoke-tested against H2 in PostgreSQL mode (create, read, upsert,
   bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient delete).
   The same behavior is expected on PostgreSQL, but it was not exercised against a live

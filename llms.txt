@@ -1,6 +1,6 @@
 # MediterraneApp
 
-> Spring Boot 2.2 / Java 11 REST API for recipes, ingredients, and preparation steps.
+> Spring Boot 4.1 / Java 17 REST API for recipes, ingredients, and preparation steps.
 > Legacy portfolio project (2020): builds, but has no tests, CI, authentication, or
 > maintained deployment. License: GPL-3.0.
 

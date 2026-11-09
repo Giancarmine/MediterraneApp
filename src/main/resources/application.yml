@@ -16,3 +16,9 @@ spring:
     hibernate:
       ddl-auto: update
       dialect: org.hibernate.dialect.PostgreSQLDialec
+
+  # Keep the historical error payload (Boot 2.2 included the exception message).
+  # Boot 4 moved the MVC error attributes under spring.web.error.
+  web:
+    error:
+      include-message: always
