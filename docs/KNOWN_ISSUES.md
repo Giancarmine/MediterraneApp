@@ -17,10 +17,10 @@ Severity:
 | --- | --- | --- | --- |
 | SEC-1 | P0 | Credentials were committed in `application.yml` | **Fixed** |
 | OPS-1 | P0 | Configured PostgreSQL instance was retired | **Fixed** |
-| API-1 | P1 | Missing recipe returns 500 instead of 404 | Open |
-| API-2 | P1 | Validation is a no-op | Open |
-| API-3 | P1 | `PUT` requires the body UUID to match the path | Open |
-| API-4 | P1 | `POST` upserts by name and reports 201 for updates | Open |
+| API-1 | P1 | Missing recipe returned 500 instead of 404 | **Fixed** |
+| API-2 | P1 | Validation was a no-op | **Fixed** |
+| API-3 | P1 | `PUT` required the body UUID to match the path | **Fixed** |
+| API-4 | P1 | `POST` upserted by name and reported 201 for updates | **Fixed** |
 | DATA-1 | P1 | Cascade delete breaks when ingredients are shared | Open |
 | DEV-1 | P1 | No tests | **Fixed** |
 | DEV-2 | P1 | No CI | **Fixed** |
@@ -64,79 +64,48 @@ PostgreSQL database and supply `SPRING_DATASOURCE_*`. See
 
 ## P1 — blocks reliable use
 
-### API-1 — Missing recipe returns 500 instead of 404
+### API-1 — Missing recipe returned 500 instead of 404
 
-**Evidence:** `RecipeService.findRecipeByUuid` and `findIngredientByUuid` call
-`orElseThrow()` with no exception mapping. Invalid UUID strings throw
+**Evidence:** `RecipeService.findRecipeByUuid` and `findIngredientByUuid` called
+`orElseThrow()` with no exception mapping. Invalid UUID strings threw
 `IllegalArgumentException`.
 
-**Fix:** add one `@RestControllerAdvice`:
+**Fix applied:** `ApiExceptionHandler` maps `NoSuchElementException` to `404` and
+`IllegalArgumentException` to `400`, keeping the default error field names. Integration
+tests cover the missing and invalid UUID paths. See [`API.md`](API.md).
 
-```java
-@ExceptionHandler(NoSuchElementException.class)
-ResponseEntity<Void> notFound() {
-    return ResponseEntity.notFound().build();
-}
+### API-2 — Validation was a no-op
 
-@ExceptionHandler(IllegalArgumentException.class)
-ResponseEntity<Void> badRequest() {
-    return ResponseEntity.badRequest().build();
-}
-```
+**Evidence:** `RecipeController` used `@Valid`, but `RecipeDto` and `IngredientDto`
+declared no constraints. Payloads with missing or empty fields reached Hibernate;
+syntactically invalid JSON was rejected earlier by Jackson.
 
-Add tests for both mappings and document the new responses in
-[`API.md`](API.md).
+**Fix applied:** `RecipeDto.name` and `IngredientDto.nameIngredient` are `@NotBlank`,
+and `RecipeDto.ingredients` cascades validation. The bulk endpoint uses
+`List<@Valid RecipeDto>`. `ApiExceptionHandler` maps `MethodArgumentNotValidException`,
+`HandlerMethodValidationException`, and `ConstraintViolationException` to `400`.
+`spring-boot-starter-validation` stays on the classpath through the web starter.
 
-### API-2 — Validation is a no-op
+### API-3 — `PUT` required the body UUID to match the path
 
-**Evidence:** `RecipeController` uses `@Valid`, but `RecipeDto` and `IngredientDto`
-declare no constraints. Payloads with missing or empty fields reach Hibernate;
-syntactically invalid JSON is rejected earlier by Jackson.
+**Evidence:** `RecipeMapper.updateModel` used to set the entity UUID from the body. The
+controller loaded the entity by the path UUID, then the mapper overwrote its identifier,
+so a missing or different body UUID produced a `500` `identifier ... was altered`.
 
-**Fix:** add Bean Validation annotations, for example `@NotBlank` on `name`,
-`@NotEmpty` on `steps`, `@Valid` on the ingredient set, and constraints on ingredient
-fields. For the bulk endpoint, use `List<@Valid RecipeDto>` so container element
-validation runs. Map `MethodArgumentNotValidException` to `400` in the advice class.
-Confirm `spring-boot-starter-validation` remains on the classpath (it is currently
-transitive through the web starter).
+**Fix applied:** `updateModel` no longer touches the UUID. The controller keeps the
+loaded entity's identity, treats the path UUID as authoritative, and returns `400` when
+a supplied body UUID does not match. Integration tests cover the matching, omitted, and
+mismatched cases.
 
-### API-3 — `PUT` requires the body UUID to match the path
-
-**Evidence:** `RecipeMapper.updateModel` always sets
-`recipe.setUuid(recipeDto.getUuid() != null ? UUID.fromString(...) : null)`. The
-controller loads the entity by the path UUID, then the mapper overwrites its identifier
-with the body value.
-
-**Verified behavior (H2 smoke test):**
-
-- Body without `uuid` → `500`, message
-  `identifier of an instance of ... was altered from <path-uuid> to null`. The row is
-  unchanged.
-- Body with a different UUID → `500`, message
-  `identifier of an instance of ... was altered from <path-uuid> to <body-uuid>`. The
-  row is unchanged.
-- Body with the matching UUID → the intended update.
-
-**Fix (preferred):** do not map the UUID in `updateModel`; keep the loaded entity's
-identity. If the client sends a UUID, reject a mismatch with `400`. Document that the
-path is authoritative. Add regression tests for all three cases.
-
-### API-4 — `POST` upserts by name and returns 201 for updates
+### API-4 — `POST` upserted by name and returned 201 for updates
 
 **Evidence:** `RecipeController.createRecipe` calls `findRecipeByName`; when a recipe
-exists, it copies the existing UUID onto the DTO and saves. The response is always
-`201 Created`.
+exists, it updates the same row. The response used to be `201 Created` in both cases.
 
-**Consequences:** duplicate names silently overwrite data, and clients cannot
-distinguish create from update.
-
-**Fix:** choose an explicit contract:
-
-- keep upsert but return `200` on update and `201` on create; or
-- reject duplicates with `409 Conflict`; or
-- move upsert to a separate endpoint.
-
-Whichever option is chosen, update [`API.md`](API.md) and add tests.
+**Fix applied:** the upsert behavior is kept for compatibility, but the status now
+distinguishes the outcomes: `201 Created` on create and `200 OK` on update. Integration
+tests assert both. Duplicate names still overwrite data by design; changing the upsert
+key needs a migration plan.
 
 ### DATA-1 — Cascade delete breaks when ingredients are shared
 
@@ -167,11 +136,11 @@ needs a migration plan.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 20 tests covering the two mappers, `RecipeRepository`, and the
+**Fix applied:** added 24 tests covering the two mappers, `RecipeRepository`, and the
 full HTTP API. They run on H2 in PostgreSQL mode via the `test` profile and never touch
 a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
-instead of rendering the 500 body.
+instead of rendering the error body.
 
 ### DEV-2 — No CI
 
@@ -361,7 +330,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 20 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 24 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -370,6 +339,7 @@ coordinates and any dependency references.
 - Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
   low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
-  upsert, bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient
-  delete). The same behavior is expected on PostgreSQL, but it was not exercised against
-  a live PostgreSQL server.
+  upsert, bulk, validation, missing row returning 404, invalid UUID returning 400, PUT
+  with matching/omitted/mismatched UUID, delete, shared-ingredient delete). The same
+  behavior is expected on PostgreSQL, but it was not exercised against a live PostgreSQL
+  server.

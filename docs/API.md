@@ -6,8 +6,9 @@ authentication, versioning, or ingredient endpoint.
 - **Base URL (local):** `http://localhost:8080`
 - **Content type:** `application/json`
 - **Authentication:** none
-- **Error format:** Spring Boot's default error JSON, with `message` enabled and an
-  ISO-8601 `timestamp`
+- **Error format:** JSON with `timestamp`, `status`, `error`, `message`, and `path`.
+  Handled exceptions use this shape; unhandled exceptions use Spring Boot's default
+  error body, which has the same top-level keys.
 
 This document describes the code as it exists, including its quirks. See
 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) before relying on any behavior in production.
@@ -109,9 +110,10 @@ curl -s http://localhost:8080/recipe/3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81
 ```
 
 - `200 OK` with the recipe when it exists.
-- `500 Internal Server Error` when it does not. `RecipeService.findRecipeByUuid` uses
-  `orElseThrow()` with no mapping to `404`.
-- `500 Internal Server Error` when `{uuid}` is not a valid UUID.
+- `404 Not Found` when it does not. `NoSuchElementException` is mapped by
+  `ApiExceptionHandler`.
+- `400 Bad Request` when `{uuid}` is not a valid UUID. `IllegalArgumentException` is
+  mapped by the same handler.
 
 ### `POST /recipe`
 
@@ -138,24 +140,25 @@ curl -i -X POST http://localhost:8080/recipe \
   }'
 ```
 
-Response: `201 Created` with the saved recipe, including its `uuid`.
+Response: `201 Created` with the saved recipe on create, or `200 OK` with the saved
+recipe when an existing `name` is updated. Both include the recipe `uuid`.
 
 Behavior:
 
 - The controller calls `RecipeService.findRecipeByName`.
-- If a recipe with that name exists, its `uuid` is copied into the request DTO and the
-  entity is updated. The response is still `201 Created`.
-- If no recipe exists, a new entity is created. A client-supplied `uuid` is accepted
-  only in this new-name path, because the mapper copies it onto the entity.
+- If a recipe with that name exists, the existing entity is updated and the response is
+  `200 OK`.
+- If no recipe exists, a new entity is created and the response is `201 Created`. A
+  client-supplied `uuid` is accepted only in this new-name path.
 - Ingredients are resolved by the exact triple
   `(nameIngredient, amount, measurement)`. A missing triple becomes a new ingredient
   and is persisted through `CascadeType.ALL`.
 - Scalar fields are copied unconditionally, so omitting one on an update sets it to
   `null`. `steps` and `ingredients` are only replaced when the field is present;
   omitting them keeps the existing collection.
-- `@Valid` is declared but the DTO has no constraints, so payloads with missing or
-  empty fields are accepted until they fail at the persistence layer. Syntactically
-  invalid JSON is rejected earlier by Jackson with `400`.
+- `name` must not be blank and each ingredient's `nameIngredient` must not be blank.
+  Violations return `400 Bad Request` before persistence. Syntactically invalid JSON is
+  rejected earlier by Jackson with `400`.
 
 ### `POST /recipe/bulk`
 
@@ -179,8 +182,10 @@ Content-Type: application/json
 ```
 
 The method returns `HttpStatus.CREATED` from a `@RestController`, so the status stays
-`200` and the JSON body is the string `"CREATED"`. There is no transaction around the
-loop: if item 3 fails, items 1 and 2 remain saved.
+`200` and the JSON body is the string `"CREATED"`. Request validation applies to every
+item; an invalid item returns `400 Bad Request` before any item is processed. There is
+no transaction around the loop, so a failure during processing can leave earlier items
+saved.
 
 ### `PUT /recipe/{uuid}`
 
@@ -203,11 +208,10 @@ curl -i -X PUT http://localhost:8080/recipe/3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81
 ```
 
 - `200 OK` with the updated recipe.
-- `500 Internal Server Error` when the path UUID does not exist.
-- `500 Internal Server Error` when the body omits `uuid` or sends a different one.
-  `RecipeMapper.updateModel` rewrites the managed entity's identifier, and Hibernate
-  throws `HibernateException: identifier of an instance of ... was altered`. The row is
-  not changed. **Always send the path UUID in the body.**
+- `404 Not Found` when the path UUID does not exist.
+- `400 Bad Request` when the path UUID or a supplied body `uuid` is invalid.
+- The path UUID is authoritative. The body `uuid` is optional; if present, it must match
+  the path. A mismatch returns `400 Bad Request` and leaves the row unchanged.
 
 ### `DELETE /recipe/{uuid}`
 
@@ -223,7 +227,8 @@ Content-Type: application/json
 ```
 
 - `200 OK` with `"OK"` when the recipe is deleted.
-- `500 Internal Server Error` when the UUID does not exist.
+- `404 Not Found` when the UUID does not exist.
+- `400 Bad Request` when the UUID is invalid.
 - Because the ingredient relation uses `CascadeType.ALL`, deleting a recipe also
   deletes its unshared ingredient rows.
 - If any ingredient is shared with another recipe, the foreign key blocks the cascade:
@@ -238,31 +243,41 @@ a recipe payload. Adding a public ingredient API is an additive change, not a re
 
 ## Error responses
 
-The application has no `@RestControllerAdvice`. Errors fall through to Spring Boot's
-default error handling. A missing recipe typically produces:
+`ApiExceptionHandler` is a `@RestControllerAdvice` that maps:
+
+- `NoSuchElementException` → `404 Not Found`
+- `IllegalArgumentException` → `400 Bad Request`
+- `MethodArgumentNotValidException`, `HandlerMethodValidationException`, and
+  `ConstraintViolationException` → `400 Bad Request`
+
+A missing recipe produces:
 
 ```json
 {
   "timestamp": "2026-11-09T14:10:23.026Z",
-  "status": 500,
-  "error": "Internal Server Error",
-  "message": "No value present",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Recipe not found: 00000000-0000-0000-0000-000000000000",
   "path": "/recipe/00000000-0000-0000-0000-000000000000"
 }
 ```
 
+Unhandled exceptions, such as the shared-ingredient foreign-key violation on `DELETE`,
+still use Spring Boot's default error body, which has the same top-level keys.
+
 Do not build clients that depend on the exact `message` text.
 `spring.web.error.include-message: always` in `application.yml` preserves the pre-upgrade
 payload (Boot 2.2 included the message by default); remove it if leaking exception text
-is a concern. If you add error handling, map `NoSuchElementException` to `404` and
-`IllegalArgumentException` to `400` in one `@RestControllerAdvice`.
+is a concern.
 
 ## Compatibility rules for agents
 
 - Keep existing paths and JSON field names unless the owner approves a breaking change.
 - Add new fields as optional and non-null-safe on read.
-- Do not change the upsert-by-name behavior of `POST /recipe` or the UUID semantics of
-  `PUT /recipe/{uuid}` without documenting the migration.
-- If you add validation, document the new `400` responses here.
+- The upsert-by-name behavior of `POST /recipe` is deliberate; changing the key needs a
+  migration plan. `POST` returns `200` for an update and `201` for a create.
+- The path UUID is authoritative for `PUT /recipe/{uuid}`; a mismatched body UUID is a
+  `400`.
+- Keep the validation rules and their `400` responses in sync with this document.
 - If you add an ingredient endpoint, document it here and update
   [`../AGENTS.md`](../AGENTS.md).

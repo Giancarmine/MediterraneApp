@@ -38,7 +38,9 @@ recipes, persists recipes and ingredients in PostgreSQL, and has no frontend.
 src/main/java/com/ges/mediterraneapp/
 ├── MediterraneappApplication.java     @SpringBootApplication
 ├── controller/
-│   └── RecipeController.java          /recipe endpoints
+│   ├── RecipeController.java          /recipe endpoints
+│   ├── ApiExceptionHandler.java       exception -> 400/404 mapping
+│   └── ApiError.java                  error response body
 ├── service/
 │   ├── RecipeService.java             recipe use cases
 │   └── IngredientService.java         ingredient use cases
@@ -62,8 +64,9 @@ src/main/java/com/ges/mediterraneapp/
 
 | Class | Responsibility | Notes |
 | --- | --- | --- |
-| `RecipeController` | HTTP routing, request validation marker, response status | Constructs `RecipeMapper` manually in its constructor. |
-| `RecipeService` | Find, create, update, delete recipes | No `@Transactional`. `orElseThrow()` on missing rows. |
+| `RecipeController` | HTTP routing, request validation, response status | Constructs `RecipeMapper` manually in its constructor. |
+| `RecipeService` | Find, create, update, delete recipes | No `@Transactional`. Throws `NoSuchElementException` on missing rows; mapped to `404`. |
+| `ApiExceptionHandler` | Maps handled exceptions to `400`/`404` JSON errors | One `@RestControllerAdvice`; keeps the default error field names. |
 | `IngredientService` | Find, create, update, delete ingredients | Not exposed through HTTP. |
 | `RecipeMapper` | Entity/DTO conversion and ingredient resolution | Calls `IngredientService` for each DTO ingredient. |
 | `IngredientMapper` | Entity/DTO conversion | `toDto` is package-private. |
@@ -82,7 +85,8 @@ src/main/java/com/ges/mediterraneapp/
 2. The controller calls `RecipeService.findRecipeByUuid(uuid)`.
 3. The service converts the string to `UUID` and calls
    `RecipeRepository.findByUuid`.
-4. `orElseThrow()` raises `NoSuchElementException` when absent.
+4. `orElseThrow()` raises `NoSuchElementException` when absent; `ApiExceptionHandler`
+   maps it to `404 Not Found`. An invalid UUID becomes `400 Bad Request`.
 5. `RecipeMapper.toDto` copies scalar fields, steps, and the ingredient set.
 6. Spring serializes the DTO as JSON.
 
@@ -94,8 +98,9 @@ There is no transaction annotation. Each repository call runs in its own transac
 2. `RecipeController.createRecipe` calls `RecipeService.findRecipeByName`.
    - A miss returns `new Recipe()` rather than an empty `Optional`.
    - A hit returns the existing entity.
-3. If the existing entity has a UUID, the controller copies it into the DTO.
-4. `RecipeMapper.updateModel`:
+3. If the existing entity has a UUID, the controller keeps it as the update target. For
+   a brand-new recipe, a client-supplied UUID is applied to the new entity.
+4. `RecipeMapper.updateModel` never rewrites the entity UUID:
    - copies every scalar field, including nulls;
    - replaces `steps` only when the request field is non-null;
    - for each `IngredientDto`, calls
@@ -103,12 +108,14 @@ There is no transaction annotation. Each repository call runs in its own transac
    - a miss returns a new transient `Ingredient(name, amount, measurement)`.
 5. `RecipeService.createRecipe` calls `save`.
 6. `CascadeType.ALL` persists new ingredients and the join rows.
-7. The saved entity is mapped back to a DTO and returned with `201 Created`.
+7. The saved entity is mapped back to a DTO and returned with `201 Created` on create or
+   `200 OK` on update.
 
 Consequences:
 
 - `POST` is an upsert keyed by `name`.
-- `@Valid` does nothing because the DTO has no constraints.
+- `@NotBlank` on `RecipeDto.name` and `IngredientDto.nameIngredient` makes `@Valid`
+  effective; violations return `400` through `ApiExceptionHandler`.
 - The whole operation is not wrapped in a service-level transaction; `save` cascades in
   its own transaction. New ingredients are persisted as part of that save.
 - A failure part-way through a bulk request leaves earlier items committed.
@@ -197,21 +204,18 @@ missing or the database is unreachable, startup fails; there is no graceful degr
 | DTO/entity separation | The JSON contract is independent of the schema, but requires manual mapping. |
 | Hand-written mappers | No annotation processor or magic; more code to maintain. History shows MapStruct was tried and removed. |
 | UUID primary keys | Safe for distributed creation and public URLs; slightly larger indexes. |
-| `POST` upsert by name | Simple client workflow, but ambiguous names collide and `201` is returned for updates. |
+| `POST` upsert by name | Simple client workflow, but ambiguous names collide. Returns `201` on create and `200` on update. |
 | `CascadeType.ALL` on ingredients | Easy creation; dangerous deletion and no explicit ownership. |
 | Hibernate `ddl-auto: update` | Zero setup; unsuitable for production because changes are implicit and destructive changes are not handled. |
 | No service interfaces | Less ceremony for a small app; harder to swap implementations. |
 | Constructor-built mapper | Works, but bypasses Spring dependency injection and makes `@WebMvcTest` awkward. |
-| No global exception handler | Less code; leaks 500s for ordinary "not found" cases. |
+| Global exception handler | `ApiExceptionHandler` maps handled exceptions to `400`/`404`; unexpected failures still surface as `500`. |
 
 ## Extension points
 
 Safe, additive work:
 
 - Add `IngredientController` over the existing `IngredientService`.
-- Add a `@RestControllerAdvice` mapping `NoSuchElementException` to 404 and
-  `IllegalArgumentException` to 400.
-- Add Bean Validation constraints to the DTOs.
 - Add pagination to `GET /recipe` (document the new parameters).
 - Add `spring-boot-starter-actuator` with only `health` and `info` exposed.
 - Add Flyway or Liquibase and switch `ddl-auto` to `validate`.

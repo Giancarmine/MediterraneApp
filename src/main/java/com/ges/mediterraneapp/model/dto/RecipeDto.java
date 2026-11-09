@@ -1,6 +1,8 @@
 package com.ges.mediterraneapp.model.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.Set;
@@ -10,6 +12,7 @@ import java.util.Set;
 public class RecipeDto {
     String uuid;
 
+    @NotBlank
     String name;
     String relations;
     String preparedTime;
@@ -18,5 +21,6 @@ public class RecipeDto {
 
     Set<String> steps;
 
+    @Valid
     Set<IngredientDto> ingredients;
 }

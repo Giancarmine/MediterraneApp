@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @Slf4j
@@ -23,7 +24,7 @@ public class IngredientService {
 
     public Ingredient findIngredientByUuid (String uuid) {
         return ingredientRepository.findByUuid(UUID.fromString(uuid))
-                .orElseThrow();
+                .orElseThrow(() -> new NoSuchElementException("Ingredient not found: " + uuid));
     };
 
     public Ingredient findIngredientByNameAndAmountAndMeasurement (String name, String amount, String measurement) {

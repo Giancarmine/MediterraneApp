@@ -79,22 +79,22 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
-    void getMissingRecipeReturns500() {
+    void getMissingRecipeReturns404() {
         ResponseEntity<String> response = rest.getForEntity(
                 "/recipe/{uuid}", String.class, UUID.randomUUID());
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertJson(response);
-        assertThat(JsonPath.<Integer>read(response.getBody(), "$.status")).isEqualTo(500);
-        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).isEqualTo("No value present");
+        assertThat(JsonPath.<Integer>read(response.getBody(), "$.status")).isEqualTo(404);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("Recipe not found");
     }
 
     @Test
-    void getInvalidUuidReturns500() {
+    void getInvalidUuidReturns400() {
         ResponseEntity<String> response = rest.getForEntity(
                 "/recipe/{uuid}", String.class, "not-a-uuid");
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertJson(response);
         assertThat(JsonPath.<String>read(response.getBody(), "$.message"))
                 .contains("Invalid UUID string");
@@ -117,15 +117,58 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
-    void postWithExistingNameUpdatesTheSameRecipe() {
+    void postWithExistingNameReturns200AndUpdatesTheSameRecipe() {
         String name = unique("Upsert");
-        String firstUuid = createRecipe(name, unique("UpsertIngredientOne"));
-        String secondUuid = createRecipe(name, unique("UpsertIngredientTwo"));
+
+        ResponseEntity<String> first = postJson("/recipe",
+                recipeJson(name, unique("UpsertIngredientOne")));
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String firstUuid = JsonPath.read(first.getBody(), "$.uuid");
+
+        ResponseEntity<String> second = postJson("/recipe",
+                recipeJson(name, unique("UpsertIngredientTwo")));
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String secondUuid = JsonPath.read(second.getBody(), "$.uuid");
 
         assertThat(secondUuid).isEqualTo(firstUuid);
         assertThat(recipeRepository.findAll().stream()
                 .filter(recipe -> name.equals(recipe.getName())))
                 .hasSize(1);
+    }
+
+    @Test
+    void createRecipeWithBlankNameReturns400() {
+        ResponseEntity<String> response = postJson("/recipe", """
+                {"name":"   ","ingredients":[]}
+                """);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<Integer>read(response.getBody(), "$.status")).isEqualTo(400);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("name");
+    }
+
+    @Test
+    void createRecipeWithInvalidIngredientReturns400() {
+        ResponseEntity<String> response = postJson("/recipe", """
+                {"name":"%s","ingredients":[{"amount":"1","measurement":"kg"}]}
+                """.formatted(unique("InvalidIngredient")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message"))
+                .contains("nameIngredient");
+    }
+
+    @Test
+    void bulkCreateWithBlankNameReturns400() {
+        ResponseEntity<String> response = postJson("/recipe/bulk", """
+                [{"name":"   ","ingredients":[]}]
+                """);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("blank");
     }
 
     @Test
@@ -151,7 +194,24 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
-    void updateRecipeWithMismatchedUuidReturns500AndKeepsTheRow() {
+    void updateRecipeWithoutBodyUuidUsesPathUuid() {
+        String uuid = createRecipe(unique("NoBodyUuid"), unique("NoBodyUuidIngredient"));
+        String newName = unique("NoBodyUuidAfter");
+
+        ResponseEntity<String> response = putJson("/recipe/{uuid}",
+                """
+                        {"name":"%s","steps":["only"]}
+                        """.formatted(newName),
+                uuid);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.uuid")).isEqualTo(uuid);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.name")).isEqualTo(newName);
+    }
+
+    @Test
+    void updateRecipeWithMismatchedUuidReturns400AndKeepsTheRow() {
         String name = unique("Unchanged");
         String uuid = createRecipe(name, unique("MismatchIngredient"));
 
@@ -161,8 +221,10 @@ class RecipeApiIntegrationTest {
                         """.formatted(UUID.randomUUID()),
                 uuid);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message"))
+                .contains("match the path uuid");
 
         ResponseEntity<String> reloaded = rest.getForEntity("/recipe/{uuid}", String.class, uuid);
         assertThat(reloaded.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -180,8 +242,8 @@ class RecipeApiIntegrationTest {
         assertThat(response.getBody()).isEqualTo("\"OK\"");
 
         ResponseEntity<String> reloaded = rest.getForEntity("/recipe/{uuid}", String.class, uuid);
-        assertThat(reloaded.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(JsonPath.<String>read(reloaded.getBody(), "$.message")).isEqualTo("No value present");
+        assertThat(reloaded.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(JsonPath.<String>read(reloaded.getBody(), "$.message")).contains("Recipe not found");
     }
 
     @Test
