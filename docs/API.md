@@ -71,10 +71,10 @@ Content-Type: application/json
 "I_AM_A_TEAPOT"
 ```
 
-The method returns `HttpStatus.I_AM_A_TEAPOT.name()` from a `@RestController`, so the
-response body is the plain string `I_AM_A_TEAPOT`. It does **not** return HTTP 418. The
-`.name()` call is deliberate: Jackson 3 would otherwise serialize the enum with
-`toString()` and produce `"418 I_AM_A_TEAPOT"`.
+The method returns `HttpStatus.I_AM_A_TEAPOT` from a `@RestController`, so the response
+body is the JSON string `"I_AM_A_TEAPOT"`. It does **not** return HTTP 418.
+`JacksonConfig` registers an `HttpStatus` serializer that writes `name()`, because
+Jackson 3 would otherwise use `toString()` and produce `"418 I_AM_A_TEAPOT"`.
 
 ### `GET /recipe`
 
@@ -178,8 +178,8 @@ Content-Type: application/json
 "CREATED"
 ```
 
-The method returns `HttpStatus.CREATED.name()` from a `@RestController`, so the status
-stays `200` and `CREATED` is written to the body. There is no transaction around the
+The method returns `HttpStatus.CREATED` from a `@RestController`, so the status stays
+`200` and the JSON body is the string `"CREATED"`. There is no transaction around the
 loop: if item 3 fails, items 1 and 2 remain saved.
 
 ### `PUT /recipe/{uuid}`

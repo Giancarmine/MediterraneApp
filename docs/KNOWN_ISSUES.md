@@ -22,8 +22,8 @@ Severity:
 | API-3 | P1 | `PUT` requires the body UUID to match the path | Open |
 | API-4 | P1 | `POST` upserts by name and reports 201 for updates | Open |
 | DATA-1 | P1 | Cascade delete breaks when ingredients are shared | Open |
-| DEV-1 | P1 | No tests | Open |
-| DEV-2 | P1 | No CI | Open |
+| DEV-1 | P1 | No tests | **Fixed** |
+| DEV-2 | P1 | No CI | **Fixed** |
 | DEV-3 | P3 | Maven wrapper was incomplete | **Fixed** |
 | DEV-4 | P1 | Jasypt 2.0.0 could not be resolved | **Fixed** |
 | CODE-1 | P2 | `StepRepository` is malformed and unused | Open |
@@ -183,19 +183,23 @@ needs a migration plan.
 
 ### DEV-1 — No tests
 
-**Evidence:** there is no `src/test` directory. `./mvnw test` reports "No tests to run".
+**Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
+run".
 
-**Fix:** start with mapper unit tests, controller slice tests, and repository tests. See
-the testing section of [`../AGENTS.md`](../AGENTS.md) and add `H2` (or Testcontainers)
-for repository tests. Do not point tests at a real database.
+**Fix applied:** added 20 tests covering the two mappers, `RecipeRepository`, and the
+full HTTP API. They run on H2 in PostgreSQL mode via the `test` profile and never touch
+the configured remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
+`TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
+instead of rendering the 500 body.
 
 ### DEV-2 — No CI
 
-**Evidence:** no `.github/workflows` directory.
+**Evidence:** there was no `.github/workflows` directory.
 
-**Fix:** add a workflow that runs `./mvnw -B verify` on JDK 17 for pushes and pull
-requests. Add dependency and container scanning once the build is stable. Keep the
-checked-in wrapper and use `./mvnw`, not a system Maven.
+**Fix applied:** `.github/workflows/ci.yml` runs `./mvnw -B verify` on Temurin 17 for
+pushes and pull requests to `main`, caches the Maven repository, and uploads Surefire
+reports when a run fails. Add dependency and container scanning once the build is
+stable.
 
 ### DEV-4 — Jasypt dependency was unbuildable
 
@@ -367,12 +371,11 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 17.0.21 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → `No tests to run`, `BUILD SUCCESS`.
+- `./mvnw test` → 20 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
-  the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. The controller returns
-  `HttpStatus.*.name()` to keep the historical strings.
-- API behavior was smoke-tested against H2 in PostgreSQL mode (create, read, upsert,
-  bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient delete).
-  The same behavior is expected on PostgreSQL, but it was not exercised against a live
-  PostgreSQL server.
-- No test suite exists, so "tests pass" is not a meaningful claim for this repository.
+  the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
+  `HttpStatus` serializer that writes the enum name.
+- The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
+  upsert, bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient
+  delete). The same behavior is expected on PostgreSQL, but it was not exercised against
+  a live PostgreSQL server.

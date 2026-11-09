@@ -20,6 +20,9 @@ it with a system Maven in build instructions.
 ./mvnw test
 ```
 
+The tests use an in-memory H2 database and do not need PostgreSQL. `./mvnw -B verify`
+runs the same suite plus packaging, which is what CI executes.
+
 To run the API, override the datasource (the checked-in values are historical and
 unreachable):
 
@@ -41,8 +44,8 @@ Docker instructions.
 3. Preserve the existing API behavior unless the change is explicitly a breaking one.
    `POST /recipe` upserts by `name`; `PUT /recipe/{uuid}` expects the same UUID in the
    body.
-4. Add or update tests when practical. The test tree does not exist yet; see the testing
-   section of [`AGENTS.md`](AGENTS.md).
+4. Add or update tests when practical. The suite lives under `src/test/java`; see the
+   testing section of [`AGENTS.md`](AGENTS.md).
 5. Update the owning documentation:
    - endpoint or payload change → [`docs/API.md`](docs/API.md);
    - design or persistence change → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md);
@@ -50,8 +53,7 @@ Docker instructions.
 6. Run the checks:
 
    ```bash
-   ./mvnw -B -DskipTests package
-   ./mvnw test
+   ./mvnw -B verify
    git diff --check
    ```
 

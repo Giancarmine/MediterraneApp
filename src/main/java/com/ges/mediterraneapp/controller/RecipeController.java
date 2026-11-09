@@ -32,10 +32,8 @@ public class RecipeController {
     }
 
     @GetMapping("/status")
-    public String status() {
-        // Jackson 3 serializes enums with toString() ("418 I_AM_A_TEAPOT"); the public
-        // API has always returned the enum name, so build the body explicitly.
-        return HttpStatus.I_AM_A_TEAPOT.name();
+    public HttpStatus status() {
+        return HttpStatus.I_AM_A_TEAPOT;
     }
 
     @GetMapping
@@ -61,9 +59,9 @@ public class RecipeController {
     }
 
     @PostMapping("/bulk")
-    public String createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
+    public HttpStatus createRecipes (@Valid @RequestBody List<RecipeDto> recipes) {
         recipes.forEach(this::createRecipe);
-        return HttpStatus.CREATED.name();
+        return HttpStatus.CREATED;
     }
 
     @PutMapping("/{uuid}")
@@ -74,8 +72,8 @@ public class RecipeController {
     }
 
     @DeleteMapping("/{uuid}")
-    public String deleteRecipe (@PathVariable String uuid) {
+    public HttpStatus deleteRecipe (@PathVariable String uuid) {
         recipeService.deleteRecipe(uuid);
-        return HttpStatus.OK.name();
+        return HttpStatus.OK;
     }
 }
