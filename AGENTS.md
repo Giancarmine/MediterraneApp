@@ -9,7 +9,7 @@ changing code.
 | Field | Value |
 | --- | --- |
 | What it is | REST API for recipes, their ingredients, and preparation steps |
-| Language | Java 17 |
+| Language | Java 25 (LTS) |
 | Framework | Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7.4) |
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
@@ -24,9 +24,12 @@ consumed.
 
 ## Current state
 
-- `./mvnw clean package` succeeds on JDK 17 with Spring Boot 4.1.2 and Jasypt
+- `./mvnw clean package` succeeds on JDK 25 with Spring Boot 4.1.2 and Jasypt
   4.0.4. The upgrade from Boot 2.2.6 moved `javax.*` imports to `jakarta.*` and added
   `spring-boot-starter-validation`, which Boot 4 no longer pulls in transitively.
+- JDK 23+ no longer runs annotation processors implicitly. The POM lists Lombok under
+  `maven-compiler-plugin` → `annotationProcessorPaths`; keep that configuration when the
+  compiler plugin changes, or Lombok-generated accessors disappear.
 - Jackson 3 serializes enums with `toString()`, which would change the historical
   bodies (`"I_AM_A_TEAPOT"`, `"CREATED"`, `"OK"`). `JacksonConfig` registers an
   `HttpStatus` serializer that writes `name()`, so the controller keeps returning the
@@ -58,7 +61,7 @@ See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
    must be called out explicitly.
 4. **Make the smallest change that solves the problem.** Do not reformat unrelated
    files, rename packages, or upgrade the framework as a side effect.
-5. **Stay on Java 17 and Spring Boot 4.1.x** unless the owner explicitly asks for a
+5. **Stay on Java 25 (LTS) and Spring Boot 4.1.x** unless the owner explicitly asks for a
    migration. The code uses the `jakarta.*` namespace; do not reintroduce `javax.*`
    imports.
 6. **Do not reintroduce MapStruct.** The Git history contains abandoned MapStruct
@@ -87,11 +90,11 @@ Before changing anything, read:
 
 ## Quick start
 
-Prerequisites: JDK 17 and network access for the Maven wrapper and dependencies.
+Prerequisites: JDK 25 (LTS) and network access for the Maven wrapper and dependencies.
 PostgreSQL is required to actually start the application (12+ recommended).
 
 ```bash
-# Compile and package (verified on Temurin 17.0.21)
+# Compile and package (verified on Temurin 25.0.5+8)
 ./mvnw -B clean package
 
 # Run the test suite (H2, no PostgreSQL required)
@@ -138,8 +141,8 @@ docker run --rm -p 8080:8080 \
   mediterraneapp
 ```
 
-The Dockerfile builds with `maven:3.9-eclipse-temurin-17` and runs on
-`eclipse-temurin:17-jre`.
+The Dockerfile builds with `maven:3.9-eclipse-temurin-25` and runs on
+`eclipse-temurin:25-jre`.
 
 ## Configuration
 

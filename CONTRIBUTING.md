@@ -12,8 +12,8 @@ should stay focused and easy to review.
 
 ## Setup
 
-Prerequisites: JDK 17 and PostgreSQL 12+. The Maven wrapper is committed; do not replace
-it with a system Maven in build instructions.
+Prerequisites: JDK 25 (LTS) and PostgreSQL 12+. The Maven wrapper is committed; do not
+replace it with a system Maven in build instructions.
 
 ```bash
 ./mvnw -B clean package
@@ -75,7 +75,7 @@ rationale in the pull request or the relevant document.
 
 ## Code style
 
-- Java 17, 4-space indentation, LF line endings, final newline.
+- Java 25 (LTS), 4-space indentation, LF line endings, final newline.
 - Follow the existing package layout: `controller`, `service`, `mapper`, `model.dao`,
   `model.dao.repository`, `model.dto`.
 - Use Lombok for entities and DTOs; do not add boilerplate accessors.
