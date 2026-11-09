@@ -1,6 +1,6 @@
 # MediterraneApp
 
-> Spring Boot 4.1 / Java 17 REST API for recipes, ingredients, and preparation steps.
+> Spring Boot 4.1 / Java 25 (LTS) REST API for recipes, ingredients, and preparation steps.
 > Legacy portfolio project (2020): builds, has a test suite and CI, but no
 > authentication or maintained deployment. License: GPL-3.0.
 
@@ -26,7 +26,7 @@
 - Repositories: `RecipeRepository`, `IngredientRepository`, plus unused
   `StepRepository`.
 - Build and test: `./mvnw -B verify`. Tests run on H2 in PostgreSQL mode, so no
-  database is required. CI runs the same command on JDK 17.
+  database is required. CI runs the same command on JDK 25 (LTS).
 - Configuration: `src/main/resources/application.yml`; override the datasource with
   `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
   `SPRING_DATASOURCE_PASSWORD`.

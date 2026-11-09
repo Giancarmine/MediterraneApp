@@ -6,7 +6,7 @@ datasource through the environment; the paths below are templates.
 
 ## Prerequisites
 
-- JDK 17 (the POM targets Java 17).
+- JDK 25 LTS (the POM targets Java 25).
 - Maven is not required separately: the committed wrapper downloads Maven 3.9.16.
 - PostgreSQL for a real run (12 or newer recommended). The schema is created by Hibernate.
 - Docker is optional.
@@ -94,12 +94,12 @@ or a Docker network that contains both containers.
 
 The Dockerfile is a two-stage build:
 
-1. `maven:3.9-eclipse-temurin-17` runs `mvn clean install` inside the image.
-2. `eclipse-temurin:17-jre` copies the fat JAR and runs it with `JAVA_OPTS`.
+1. `maven:3.9-eclipse-temurin-25` runs `mvn clean install` inside the image.
+2. `eclipse-temurin:25-jre` copies the fat JAR and runs it with `JAVA_OPTS`.
 
 Known weaknesses (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
 
-- The images are current Temurin 17 tags, but they are not pinned to a digest.
+- The images are current Temurin 25 tags, but they are not pinned to a digest.
 - `COPY --from=build "MediterraneApp/target/*.jar" app.jar` wraps the wildcard in
   quotes. Docker does not expand a glob inside quotes; verify the copy or use the exact
   JAR name.
@@ -108,7 +108,7 @@ Known weaknesses (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
 
 ## Heroku (legacy)
 
-`system.properties` sets `java.runtime.version=17`. There is no `Procfile` and no
+`system.properties` sets `java.runtime.version=25`. There is no `Procfile` and no
 `app.json`.
 
 Before deploying to Heroku:
@@ -162,4 +162,4 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
 | `Port 8080 was already in use` | Another process owns the port | Set `SERVER_PORT` or stop the other process |
 | Tables are missing | Database user cannot create tables, or `ddl-auto` was changed | Grant schema privileges or run migrations |
 | `IncorrectResultSizeDataAccessException` | Duplicate ingredient triples | Deduplicate ingredients and add a unique constraint |
-| Build fails on JDK 11 or older | Boot 4 and the POM require Java 17 | Build with JDK 17 |
+| Build fails on JDK 24 or older | Boot 4 and the POM require Java 25 | Build with JDK 25 |

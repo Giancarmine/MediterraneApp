@@ -1,7 +1,7 @@
 # Docker multi-stage build
 
 # 1. Building the App with Maven
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-25 AS build
 
 ADD . /MediterraneApp
 WORKDIR /MediterraneApp
@@ -14,7 +14,7 @@ RUN mvn clean install
 
 
 # 2. Just using the build artifact and then removing the build-container
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 
 MAINTAINER El_Giancar & Lleda
 

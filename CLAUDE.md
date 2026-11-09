@@ -3,7 +3,7 @@
 **Read [`AGENTS.md`](AGENTS.md) first.** It is the canonical contract for this
 repository. This file is a short pointer for Claude Code.
 
-MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
+MediterraneApp is a Spring Boot 4.1 / Java 25 (LTS) REST API for recipes, backed by
 PostgreSQL. The project is a legacy portfolio app: it builds and has a test suite plus
 CI, but no authentication. No database credentials are checked in; supply
 `SPRING_DATASOURCE_*` at runtime.

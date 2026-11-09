@@ -176,7 +176,7 @@ instead of rendering the 500 body.
 
 **Evidence:** there was no `.github/workflows` directory.
 
-**Fix applied:** `.github/workflows/ci.yml` runs `./mvnw -B verify` on Temurin 17 for
+**Fix applied:** `.github/workflows/ci.yml` runs `./mvnw -B verify` on Temurin 25 for
 pushes and pull requests to `main`, caches the Maven repository, and uploads Surefire
 reports when a run fails. Add dependency and container scanning once the build is
 stable.
@@ -190,7 +190,7 @@ returns `401 Unauthorized`.
 
 **Fix applied:** the dependency now tracks `jasypt-spring-boot-starter:4.0.4`, which is
 the line that supports Spring Boot 4. `./mvnw -B -DskipTests package` succeeds on
-Temurin 17.0.21.
+Temurin 25.0.5+8.
 
 Keep the Jasypt version current. If a future version changes property names or
 encryption defaults, update this document and the configuration notes.
@@ -349,7 +349,7 @@ coordinates and any dependency references.
 
 ## Verification notes
 
-- Build verified with Temurin 17.0.21 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
+- Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
 - `./mvnw test` → 20 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
