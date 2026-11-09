@@ -13,7 +13,7 @@ changing code.
 | Framework | Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7.4) |
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
-| Libraries | Lombok 1.18.48 (Boot BOM), Jasypt Spring Boot 4.0.4, Jackson 3 |
+| Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
 | Size | 13 main Java files, about 460 lines, 20 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
@@ -24,8 +24,8 @@ consumed.
 
 ## Current state
 
-- `./mvnw clean package` succeeds on JDK 25 with Spring Boot 4.1.2 and Jasypt
-  4.0.4. The upgrade from Boot 2.2.6 moved `javax.*` imports to `jakarta.*` and added
+- `./mvnw clean package` succeeds on JDK 25 with Spring Boot 4.1.2. The upgrade from
+  Boot 2.2.6 moved `javax.*` imports to `jakarta.*` and added
   `spring-boot-starter-validation`, which Boot 4 no longer pulls in transitively.
 - JDK 23+ no longer runs annotation processors implicitly. The POM lists Lombok under
   `maven-compiler-plugin` → `annotationProcessorPaths`; keep that configuration when the
@@ -154,7 +154,6 @@ binding means environment variables override it:
 | `SPRING_DATASOURCE_URL` | `spring.datasource.url` | JDBC URL, required at startup |
 | `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | Required at startup; no value is committed |
 | `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | Required at startup; no value is committed |
-| `JASYPT_ENCRYPTOR_PASSWORD` | `jasypt.encryptor.password` | Only needed if an `ENC(...)` value is added |
 | `SERVER_PORT` | `server.port` | Defaults to `8080` |
 
 - `.env.example` lists the variable names. Spring Boot does **not** read `.env`
@@ -188,7 +187,7 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 
 | Path | Responsibility |
 | --- | --- |
-| `src/main/java/com/ges/mediterraneapp/MediterraneappApplication.java` | Spring Boot entry point; enables Jasypt-encrypted properties. |
+| `src/main/java/com/ges/mediterraneapp/MediterraneappApplication.java` | Spring Boot entry point. |
 | `controller/RecipeController.java` | The only controller. All `/recipe` endpoints. |
 | `service/RecipeService.java` | Recipe lookup, create, update, delete. |
 | `service/IngredientService.java` | Ingredient lookup, create, update, delete. No controller exposes it yet. |
@@ -347,7 +346,7 @@ Guidance:
 - Input is not validated despite `@Valid`. Add Bean Validation constraints to the DTOs
   (and a handler for `MethodArgumentNotValidException`) when hardening the API.
 - Never log request bodies blindly; they can contain data that should not be retained.
-- Do not commit `.env`, keystores, Jasypt keys, or real database credentials. `.gitignore`
+- Do not commit `.env`, keystores, or real database credentials. `.gitignore`
   excludes `.env`; `.env.example` contains placeholders only.
 - If a credential is exposed, rotate it. Do not rely on rewriting history; see
   [`SECURITY.md`](SECURITY.md).

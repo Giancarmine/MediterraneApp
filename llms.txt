@@ -43,8 +43,8 @@
 
 ## Safety
 
-- The repository is public. Do not add secrets, real `.env` files, Jasypt keys, or
-  database credentials.
+- The repository is public. Do not add secrets, real `.env` files, or database
+  credentials.
 - No database credentials are checked in; supply `SPRING_DATASOURCE_*` at runtime. The
   historical Heroku values remain in Git history and must not be reused.
 - Do not point tests or the application at a remote database.

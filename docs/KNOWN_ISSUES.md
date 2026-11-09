@@ -36,6 +36,7 @@ Severity:
 | CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | Open |
 | DEV-5 | P2 | Mapper is constructed manually in the controller | Open |
 | DEV-6 | P3 | `@Autowired` on final fields is redundant | Open |
+| SEC-2 | P3 | Jasypt carried a low-severity advisory | **Fixed** |
 | REPO-1 | P3 | `mediterraneapp.iml` was tracked | **Fixed** |
 | REPO-2 | P3 | `HELP.md` is stale generated output | Open |
 | REPO-3 | P3 | Trailing-dot Maven `groupId` | Open |
@@ -188,12 +189,11 @@ stable.
 `spring-cloud-dependencies:Finchley.M8` from `repo.spring.io/libs-milestone`, which now
 returns `401 Unauthorized`.
 
-**Fix applied:** the dependency now tracks `jasypt-spring-boot-starter:4.0.4`, which is
-the line that supports Spring Boot 4. `./mvnw -B -DskipTests package` succeeds on
-Temurin 25.0.5+8.
-
-Keep the Jasypt version current. If a future version changes property names or
-encryption defaults, update this document and the configuration notes.
+**Fix applied:** the dependency was first moved to `jasypt-spring-boot-starter:4.0.4`,
+then removed entirely. The project has no `ENC(...)` values and the datasource is
+environment-driven, so the dependency and `@EnableEncryptableProperties` provided no
+functionality and carried a low-severity advisory (see SEC-2). If encrypted properties
+are introduced later, add a maintained encryption solution and document it.
 
 ## P2 — correctness and maintainability
 
@@ -306,6 +306,16 @@ and remove the `@Autowired` field. Do this together with tests.
 
 ## P3 — cleanup
 
+### SEC-2 — Jasypt carried a low-severity advisory
+
+**Evidence:** Dependabot reported GHSA-jgj7-c8vj-w563 / CVE-2026-9370 (low) for
+`jasypt-spring-boot` and `jasypt-spring-boot-starter` through 4.0.4; no patched version
+was available.
+
+**Fix applied:** removed Jasypt, which was unused. No configuration encryption is
+configured; supply secrets through the platform's secret store. Re-check the advisory if
+an encryption library is added later.
+
 ### DEV-3 — Maven wrapper was incomplete
 
 **Evidence:** the original repository committed `mvnw` and `mvnw.cmd` but not
@@ -357,6 +367,8 @@ coordinates and any dependency references.
   `HttpStatus` serializer that writes the enum name.
 - No database credentials are committed; the datasource is supplied through
   `SPRING_DATASOURCE_*` at runtime.
+- Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
+  low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
   upsert, bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient
   delete). The same behavior is expected on PostgreSQL, but it was not exercised against
