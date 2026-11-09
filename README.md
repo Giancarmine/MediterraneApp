@@ -1,10 +1,12 @@
 # MediterraneApp
 
+[![CI](https://github.com/Giancarmine/MediterraneApp/actions/workflows/ci.yml/badge.svg)](https://github.com/Giancarmine/MediterraneApp/actions/workflows/ci.yml)
+
 A small REST API for recipes, built with Spring Boot. It stores recipes, their
 ingredients, and their preparation steps in PostgreSQL.
 
-> **Status:** legacy portfolio project from 2020. The code compiles, but the project has
-> no tests, no CI, and no authentication, and the checked-in database configuration
+> **Status:** legacy portfolio project from 2020. The code builds and has an automated
+> test suite plus CI, but no authentication, and the checked-in database configuration
 > points at a retired instance. Read [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
 > before deploying or extending it.
 
@@ -75,7 +77,10 @@ Tests:
 ./mvnw test
 ```
 
-There are currently no tests, so this command reports "No tests to run".
+The suite runs on an in-memory H2 database in PostgreSQL mode, so it needs no
+PostgreSQL server and never touches the checked-in remote database. It covers the
+mappers, the repository, and the full HTTP API (including the documented 500
+responses). CI runs `./mvnw -B verify` on every push and pull request to `main`.
 
 ## Configuration
 

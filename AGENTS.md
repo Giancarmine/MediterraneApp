@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jasypt Spring Boot 4.0.4, Jackson 3 |
-| Size | 13 Java files, about 460 lines, no tests |
+| Size | 13 main Java files, about 460 lines, 20 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -27,14 +27,18 @@ consumed.
 - `./mvnw clean package` succeeds on JDK 17 with Spring Boot 4.1.2 and Jasypt
   4.0.4. The upgrade from Boot 2.2.6 moved `javax.*` imports to `jakarta.*` and added
   `spring-boot-starter-validation`, which Boot 4 no longer pulls in transitively.
-- Jackson 3 serializes enums with `toString()`, so the controller returns
-  `HttpStatus.*.name()` explicitly to keep the historical response bodies
-  (`"I_AM_A_TEAPOT"`, `"CREATED"`, `"OK"`). Do not remove those `.name()` calls.
-- There are no tests. `./mvnw test` succeeds with "No tests to run".
+- Jackson 3 serializes enums with `toString()`, which would change the historical
+  bodies (`"I_AM_A_TEAPOT"`, `"CREATED"`, `"OK"`). `JacksonConfig` registers an
+  `HttpStatus` serializer that writes `name()`, so the controller keeps returning the
+  enum types. Do not replace that with `HttpStatus.*.name()` strings: a `String` return
+  value is served as `text/plain` without quotes.
+- The test suite covers the mappers, the repository, and the HTTP API. It runs against
+  H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs no database.
 - `src/main/resources/application.yml` still points at a retired Heroku PostgreSQL
   instance and contains a Jasypt-encrypted password. The application will not start
   without a reachable database or environment overrides.
-- There is no CI, migration tool, authentication, actuator, OpenAPI document, or API
+- GitHub Actions runs `./mvnw -B verify` on every push and pull request to `main`.
+  There is no migration tool, authentication, actuator, OpenAPI document, or API
   versioning.
 
 See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
@@ -45,7 +49,8 @@ See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
    database host, username, and an `ENC(...)` password. Use placeholders in docs,
    tests, issues, and commits. Treat the checked-in credentials as compromised and
    rotate them before any real deployment.
-2. **Never run tests or the application against the configured remote database.** Use a
+2. **Never run tests or the application against the configured remote database.** The
+   tests use an in-memory H2 database through the `test` profile. For a real run, use a
    local PostgreSQL instance and override the datasource through environment variables
    or a local profile.
 3. **Preserve the public API shape.** Endpoint paths, JSON property names, and HTTP
@@ -89,7 +94,7 @@ PostgreSQL is required to actually start the application (12+ recommended).
 # Compile and package (verified on Temurin 17.0.21)
 ./mvnw -B clean package
 
-# Run the test suite (currently zero tests)
+# Run the test suite (H2, no PostgreSQL required)
 ./mvnw test
 
 # Start the API on http://localhost:8080
@@ -200,7 +205,7 @@ There is no `IngredientController`, no service interfaces, and no `@ControllerAd
 
 ### Request flow
 
-1. Jackson deserializes the body into a `RecipeDto`.
+1. Jackson 3 deserializes the body into a `RecipeDto`.
 2. `RecipeController` calls `RecipeService` to load or create the entity.
 3. `RecipeMapper.updateModel` copies fields and resolves each `IngredientDto` through
    `IngredientService.findIngredientByNameAndAmountAndMeasurement`. A missing ingredient
@@ -278,7 +283,8 @@ Current quirks that must be preserved unless the owner asks for a breaking chang
   another recipe causes a foreign-key violation and a 500 response that rolls back the
   delete.
 - Returning `HttpStatus` from a `@RestController` method writes the enum name as the
-  response body instead of setting the response status.
+  JSON response body instead of setting the response status. `JacksonConfig` pins that
+  name (`name()` rather than Jackson 3's `toString()`).
 
 ## Conventions
 
@@ -302,23 +308,34 @@ Current quirks that must be preserved unless the owner asks for a breaking chang
 
 ## Testing
 
-There is no `src/test` tree yet. JUnit 5 (Vintage excluded), Mockito, AssertJ, Hamcrest,
-and `spring-boot-starter-test` are already available. Add tests under
-`src/test/java/com/ges/mediterraneapp/`.
+Tests live under `src/test/java/com/ges/mediterraneapp/` and run on H2 in PostgreSQL
+mode through `src/test/resources/application-test.yml` (profile `test`). They never
+touch the configured remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
+test starters are on the test classpath.
+
+Current coverage (20 tests):
+
+- `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
+  null-collection behavior, and ingredient resolution.
+- `model/dao/repository/RecipeRepositoryTest` — `@DataJpaTest` lookups by UUID and name.
+- `RecipeApiIntegrationTest` — full HTTP behavior with `@SpringBootTest(RANDOM_PORT)`
+  and `TestRestTemplate`, so 500 responses go through the real error dispatch. It covers
+  status, create, list, get, missing/invalid UUID, bulk, upsert-by-name, PUT, PUT UUID
+  mismatch, delete, and shared-ingredient rollback.
 
 Guidance:
 
-- Unit-test `RecipeMapper` and `IngredientMapper` directly; they are plain classes.
-- Use `@WebMvcTest(RecipeController.class)` for HTTP behavior, but note that the
-  controller constructs `RecipeMapper` itself. Mock `RecipeService` and
-  `IngredientService`, or refactor the mapper to a bean first.
-- Use `@DataJpaTest` for repositories. Add `com.h2database:h2` as a test dependency and
-  an `application-test.yml`; never point tests at the configured remote database.
-- Add integration tests against Testcontainers PostgreSQL only when the extra runtime is
-  justified.
+- Prefer testing behavior over implementation. Keep the API assertions in
+  `RecipeApiIntegrationTest` aligned with [`docs/API.md`](docs/API.md).
+- Use `@DataJpaTest` for repositories and unit tests for the hand-written mappers.
+- Use the real servlet container (`RANDOM_PORT`), not `MockMvc`, when asserting error
+  responses: `MockMvc` rethrows unhandled exceptions instead of rendering the 500 body.
+- Keep `spring.jpa.open-in-view` at its production default. Disabling it for tests
+  triggers `LazyInitializationException` and detached-entity errors that production does
+  not have.
 - Every bug fix should add a regression test when practical.
-- Run `./mvnw test` before reporting success. Do not claim a check passed unless it was
-  actually run.
+- Run `./mvnw -B verify` before reporting success. Do not claim a check passed unless it
+  was actually run.
 
 ## Security
 
@@ -339,19 +356,18 @@ The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Hi
 
 1. Checked-in remote database endpoint, username, and encrypted password.
 2. The configured database no longer exists (retired Heroku instance).
-3. No tests or CI.
-4. Missing rows return 500 instead of 404.
-5. Validation is a no-op.
-6. `POST`/`PUT` UUID and upsert semantics are surprising.
-7. `StepRepository` is unused and malformed.
-8. Dockerfile relies on a wildcard copy for the packaged JAR.
+3. Missing rows return 500 instead of 404.
+4. Validation is a no-op.
+5. `POST`/`PUT` UUID and upsert semantics are surprising.
+6. `StepRepository` is unused and malformed.
+7. Dockerfile relies on a wildcard copy for the packaged JAR.
 
 ## Change workflow
 
 1. Read this file and the relevant document in `docs/`.
 2. State the scope and whether the change is a breaking API change.
 3. Make the smallest change.
-4. Compile with `./mvnw -B -DskipTests package`; run `./mvnw test` if tests exist.
+4. Run `./mvnw -B verify` (compile, tests, and packaging).
 5. Run `git diff --check`.
 6. Update the owning docs if behavior or design changed.
 7. Report what changed, what was validated, and what remains unverified.
@@ -362,8 +378,8 @@ Use a branch and pull request for non-trivial work. Do not commit generated arti
 ## Definition of Done
 
 - [ ] The requested change is complete and scoped.
-- [ ] `./mvnw -B -DskipTests package` succeeds.
-- [ ] `./mvnw test` was run, or the reason it could not run is stated.
+- [ ] `./mvnw -B verify` succeeds.
+- [ ] The test suite was run, or the reason it could not run is stated.
 - [ ] No secrets, credentials, or local configuration were added.
 - [ ] The API shape is unchanged, or the breaking change is documented.
 - [ ] `docs/API.md` and `docs/ARCHITECTURE.md` still match the code.

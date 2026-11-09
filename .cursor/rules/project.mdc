@@ -10,12 +10,12 @@ Canonical guidance: [`../../AGENTS.md`](../../AGENTS.md). Read it first; this ru
 short pointer.
 
 MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
-PostgreSQL. It is a legacy portfolio project: it builds, but has no tests, no CI, no
-authentication, and a checked-in database configuration that points at a retired Heroku
-instance.
+PostgreSQL. It is a legacy portfolio project: it builds and has a test suite plus CI,
+but no authentication, and a checked-in database configuration that points at a retired
+Heroku instance.
 
-- Build with `./mvnw -B -DskipTests package`; test with `./mvnw test` (currently zero
-  tests).
+- Run `./mvnw -B verify` before reporting success; it compiles, runs the H2-backed
+  test suite, and packages the JAR. CI runs the same command.
 - The only controller is `RecipeController` at `/recipe`. There is no ingredient
   endpoint.
 - `POST /recipe` upserts by `name`. `PUT /recipe/{uuid}` requires the same UUID in the

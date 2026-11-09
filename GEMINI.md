@@ -4,14 +4,14 @@
 repository. This file is a short pointer for Gemini CLI.
 
 MediterraneApp is a Spring Boot 4.1 / Java 17 REST API for recipes, backed by
-PostgreSQL. The project is a legacy portfolio app: it builds, but has no tests, no CI,
-no authentication, and a checked-in database configuration that points at a retired
-Heroku instance.
+PostgreSQL. The project is a legacy portfolio app: it builds and has a test suite plus
+CI, but no authentication, and a checked-in database configuration that points at a
+retired Heroku instance.
 
 ## Key facts
 
-- Build with `./mvnw -B -DskipTests package`; test with `./mvnw test` (currently zero
-  tests).
+- Run `./mvnw -B verify` before reporting success; it compiles, runs the H2-backed
+  test suite, and packages the JAR. CI runs the same command.
 - Run with `./mvnw spring-boot:run`, but override the datasource first:
   `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
   `SPRING_DATASOURCE_PASSWORD`.
