@@ -34,9 +34,9 @@ consumed.
   value is served as `text/plain` without quotes.
 - The test suite covers the mappers, the repository, and the HTTP API. It runs against
   H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs no database.
-- `src/main/resources/application.yml` still points at a retired Heroku PostgreSQL
-  instance and contains a Jasypt-encrypted password. The application will not start
-  without a reachable database or environment overrides.
+- `src/main/resources/application.yml` contains no database credentials. Supply the
+  datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
+  application will not start without it.
 - GitHub Actions runs `./mvnw -B verify` on every push and pull request to `main`.
   There is no migration tool, authentication, actuator, OpenAPI document, or API
   versioning.
@@ -45,14 +45,14 @@ See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
 
 ## Ground rules
 
-1. **Never print, copy, log, or commit real secrets.** `application.yml` contains a
-   database host, username, and an `ENC(...)` password. Use placeholders in docs,
-   tests, issues, and commits. Treat the checked-in credentials as compromised and
-   rotate them before any real deployment.
-2. **Never run tests or the application against the configured remote database.** The
-   tests use an in-memory H2 database through the `test` profile. For a real run, use a
-   local PostgreSQL instance and override the datasource through environment variables
-   or a local profile.
+1. **Never print, copy, log, or commit real secrets.** `application.yml` intentionally
+   contains no datasource credentials; use `SPRING_DATASOURCE_*` or a local, untracked
+   profile. Use placeholders in docs, tests, issues, and commits. Historical Heroku
+   values remain in Git history and must be treated as compromised.
+2. **Never run tests or the application against a remote database.** The tests use an
+   in-memory H2 database through the `test` profile. For a real run, use a local
+   PostgreSQL instance and supply the datasource through environment variables or a
+   local profile.
 3. **Preserve the public API shape.** Endpoint paths, JSON property names, and HTTP
    methods are consumed by clients. Additive changes are preferred; breaking changes
    must be called out explicitly.
@@ -101,8 +101,7 @@ PostgreSQL is required to actually start the application (12+ recommended).
 ./mvnw spring-boot:run
 ```
 
-The checked-in configuration points at a retired remote database, so set a local
-datasource before the last command:
+The configuration has no datasource credentials, so set them before the last command:
 
 ```bash
 export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
@@ -150,9 +149,9 @@ binding means environment variables override it:
 | Environment variable | Property | Notes |
 | --- | --- | --- |
 | `SPRING_DATASOURCE_URL` | `spring.datasource.url` | JDBC URL, required at startup |
-| `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | Database user |
-| `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | Overrides the `ENC(...)` value |
-| `JASYPT_ENCRYPTOR_PASSWORD` | `jasypt.encryptor.password` | Only needed if the `ENC(...)` value is used |
+| `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | Required at startup; no value is committed |
+| `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | Required at startup; no value is committed |
+| `JASYPT_ENCRYPTOR_PASSWORD` | `jasypt.encryptor.password` | Only needed if an `ENC(...)` value is added |
 | `SERVER_PORT` | `server.port` | Defaults to `8080` |
 
 - `.env.example` lists the variable names. Spring Boot does **not** read `.env`
@@ -310,7 +309,7 @@ Current quirks that must be preserved unless the owner asks for a breaking chang
 
 Tests live under `src/test/java/com/ges/mediterraneapp/` and run on H2 in PostgreSQL
 mode through `src/test/resources/application-test.yml` (profile `test`). They never
-touch the configured remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
+touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
 Current coverage (20 tests):
@@ -354,13 +353,12 @@ Guidance:
 
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
-1. Checked-in remote database endpoint, username, and encrypted password.
-2. The configured database no longer exists (retired Heroku instance).
-3. Missing rows return 500 instead of 404.
-4. Validation is a no-op.
-5. `POST`/`PUT` UUID and upsert semantics are surprising.
-6. `StepRepository` is unused and malformed.
-7. Dockerfile relies on a wildcard copy for the packaged JAR.
+1. Historical Heroku credentials remain in Git history; no credentials are checked in.
+2. Missing rows return 500 instead of 404.
+3. Validation is a no-op.
+4. `POST`/`PUT` UUID and upsert semantics are surprising.
+5. `StepRepository` is unused and malformed.
+6. Dockerfile relies on a wildcard copy for the packaged JAR.
 
 ## Change workflow
 

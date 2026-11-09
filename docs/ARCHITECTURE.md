@@ -177,19 +177,19 @@ Details:
 `application.yml` sets:
 
 - Hikari connection timeout (20 s) and maximum pool size (5);
-- PostgreSQL JDBC URL, username, and a Jasypt `ENC(...)` password;
+- no datasource credentials; the URL, username, and password come from
+  `SPRING_DATASOURCE_*` at runtime;
 - `show-sql: true`;
 - `ddl-auto: update`;
 - a misspelled dialect property.
 
-`@EnableEncryptableProperties` makes Jasypt decrypt `ENC(...)` values using the
-`jasypt.encryptor.password` property (`JASYPT_ENCRYPTOR_PASSWORD` as an environment
-variable). Overriding `SPRING_DATASOURCE_PASSWORD` with plaintext bypasses the encrypted
-value.
+`@EnableEncryptableProperties` keeps Jasypt support enabled for future `ENC(...)` values,
+using the `jasypt.encryptor.password` property (`JASYPT_ENCRYPTOR_PASSWORD`). No
+`ENC(...)` values are currently configured.
 
-At startup Spring Boot creates the datasource, Hibernate validates/updates the schema,
-and Tomcat binds port 8080. If the database is unreachable, startup fails; there is no
-graceful degradation.
+At startup Spring Boot creates the datasource from `SPRING_DATASOURCE_*`, Hibernate
+validates/updates the schema, and Tomcat binds port 8080. If the datasource variables are
+missing or the database is unreachable, startup fails; there is no graceful degradation.
 
 ## Design decisions and their trade-offs
 

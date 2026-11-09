@@ -38,23 +38,23 @@ credentials, or personal data in the report.** Use placeholders such as
 - Identifier handling in `PUT /recipe/{uuid}`.
 
 Out of scope: missing features already listed in
-[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md), the retired database host, and
-vulnerabilities that require a compromised host.
+[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md), the retired historical Heroku database
+host, and vulnerabilities that require a compromised host.
 
-## The checked-in credentials
+## Credential handling
 
-`src/main/resources/application.yml` contains a historical database host, username, and
-a Jasypt-encrypted password. Treat the whole set as compromised:
+`src/main/resources/application.yml` does not contain database credentials. Supply the
+datasource at runtime through `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and
+`SPRING_DATASOURCE_PASSWORD` (or a local `.env` file, which is ignored by Git).
 
-1. Rotate the database user and password.
-2. Update the deployment's secret store or environment variables.
+The historical Heroku host, username, and Jasypt-encrypted password were removed from the
+current tree. They remain in Git history and in forks, so treat them as compromised:
+
+1. Do not reuse the old host, username, or password anywhere.
+2. If any of them is still active, rotate it immediately.
 3. Audit database access logs for unexpected activity.
-4. Remove the values from the current configuration; keep placeholders instead.
-5. Do not assume a new commit erases the Git history. If the repository is public, the
-   old values remain in history and in forks.
-
-Do not rewrite Git history unless the maintainer explicitly asks. Rotation matters more
-than history cleanup.
+4. Do not rewrite Git history unless the maintainer explicitly asks. Rotation matters
+   more than history cleanup.
 
 ## If a secret is exposed
 

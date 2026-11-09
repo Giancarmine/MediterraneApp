@@ -1,9 +1,8 @@
 # Deployment and local setup
 
 The project is a standard Spring Boot JAR. It can run locally with Maven, in Docker, or
-on a Java platform such as Heroku. The checked-in configuration still targets a retired
-Heroku PostgreSQL instance, so treat every deployment path below as a template that
-needs fresh credentials.
+on a Java platform such as Heroku. No database credentials are checked in, so supply the
+datasource through the environment; the paths below are templates.
 
 ## Prerequisites
 
@@ -61,10 +60,10 @@ to Docker with `--env-file`. Never commit a filled `.env`.
 
 | Variable | Default in `application.yml` | Required |
 | --- | --- | --- |
-| `SPRING_DATASOURCE_URL` | Retired remote PostgreSQL URL | Yes, override it |
-| `SPRING_DATASOURCE_USERNAME` | Remote username | Yes, override it |
-| `SPRING_DATASOURCE_PASSWORD` | `ENC(...)` Jasypt value | Yes, override it |
-| `JASYPT_ENCRYPTOR_PASSWORD` | none | Only if the `ENC(...)` value is used |
+| `SPRING_DATASOURCE_URL` | none | Yes |
+| `SPRING_DATASOURCE_USERNAME` | none | Yes |
+| `SPRING_DATASOURCE_PASSWORD` | none | Yes |
+| `JASYPT_ENCRYPTOR_PASSWORD` | none | Only if you add an `ENC(...)` value |
 | `SERVER_PORT` | `8080` | No |
 | `JAVA_OPTS` | none | No, used by the Docker `CMD` |
 
@@ -131,14 +130,16 @@ Before deploying to Heroku:
    starts the JAR, but the exact default depends on the buildpack version. A `Procfile`
    such as `web: java $JAVA_OPTS -jar target/mediterraneapp-0.0.1-SNAPSHOT.jar` makes
    it explicit.
-5. Do not reuse the checked-in database URL or credentials.
+5. Do not reuse the historical Heroku database URL or credentials; they remain in Git
+   history and are compromised.
 
-Heroku's free PostgreSQL and dyno tiers no longer exist. The configured host is a
-historical artifact and should be treated as dead.
+Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was removed from
+`application.yml` but remains in Git history and should be treated as dead.
 
 ## Production checklist
 
-- [ ] Rotate the database credentials that were committed to Git history.
+- [ ] If the historical Heroku credentials are still active anywhere, rotate them; they
+  remain in Git history.
 - [ ] Provide the datasource through the platform's secret store, not
   `application.yml`.
 - [ ] Set `spring.jpa.hibernate.ddl-auto=validate` and manage the schema with Flyway or
@@ -154,7 +155,7 @@ historical artifact and should be treated as dead.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `UnknownHostException` or connection timeout at startup | The checked-in remote database is gone | Set `SPRING_DATASOURCE_*` to a reachable database |
+| `UnknownHostException` or connection timeout at startup | No datasource is configured, or it points at the retired host | Set `SPRING_DATASOURCE_*` to a reachable database |
 | `EncryptionOperationNotPossibleException` | `ENC(...)` value cannot be decrypted | Set `JASYPT_ENCRYPTOR_PASSWORD`, or override the password with plaintext |
 | Build fails resolving `jasypt-spring-boot-starter` 3.x with Boot 4 | Jasypt 3.x targets older Spring Boot versions | Use `jasypt-spring-boot-starter` 4.x (already applied) |
 | `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.9+ |

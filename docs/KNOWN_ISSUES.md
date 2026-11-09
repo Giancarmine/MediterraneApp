@@ -15,8 +15,8 @@ Severity:
 
 | ID | Severity | Area | Status |
 | --- | --- | --- | --- |
-| SEC-1 | P0 | Credentials committed in `application.yml` | Open |
-| OPS-1 | P0 | Configured PostgreSQL instance is retired | Open |
+| SEC-1 | P0 | Credentials were committed in `application.yml` | **Fixed** |
+| OPS-1 | P0 | Configured PostgreSQL instance was retired | **Fixed** |
 | API-1 | P1 | Missing recipe returns 500 instead of 404 | Open |
 | API-2 | P1 | Validation is a no-op | Open |
 | API-3 | P1 | `PUT` requires the body UUID to match the path | Open |
@@ -42,44 +42,24 @@ Severity:
 
 ## P0 — security and data loss
 
-### SEC-1 — Credentials committed in `application.yml`
+### SEC-1 — Credentials were committed in `application.yml`
 
-**Evidence:** `src/main/resources/application.yml` contains a PostgreSQL host, a
-database username, and a Jasypt `ENC(...)` password. The repository is public.
+**Evidence:** `application.yml` used to contain a PostgreSQL host, a database username,
+and a Jasypt `ENC(...)` password. The repository is public.
 
-The password is encrypted, but the host and username are plaintext, and the encryption
-key may be available in the deployment environment or in other committed files. Treat
-the whole credential set as compromised.
+**Fix applied:** removed the URL, username, and password from `application.yml`. The
+datasource is supplied through `SPRING_DATASOURCE_*` at runtime, and startup fails
+without it. The historical values remain in Git history and in forks, so treat them as
+compromised and never reuse them. See [`../SECURITY.md`](../SECURITY.md).
 
-**Fix:**
+### OPS-1 — Configured PostgreSQL instance was retired
 
-1. Rotate the database user and password now.
-2. Replace the hard-coded values with environment variables or a local profile.
-3. Keep only placeholders in `application.yml`, for example:
+**Evidence:** `application.yml` used to point at an old Heroku PostgreSQL host. Heroku's
+free PostgreSQL tier has been discontinued, so the host is unreachable.
 
-   ```yaml
-   spring:
-     datasource:
-       url: ${SPRING_DATASOURCE_URL}
-       username: ${SPRING_DATASOURCE_USERNAME}
-       password: ${SPRING_DATASOURCE_PASSWORD}
-   ```
-
-4. Audit the Git history and any forks. Deleting the file in a new commit does not
-   remove the old values.
-5. If the Jasypt key was committed or shared, rotate it and re-encrypt the values.
-
-Do not copy the current values into issues, pull requests, or documentation.
-
-### OPS-1 — Configured PostgreSQL instance is retired
-
-**Evidence:** `application.yml` points at an old Heroku PostgreSQL host. Heroku's free
-PostgreSQL tier has been discontinued, so the host is expected to be unreachable.
-
-**Symptom:** startup fails with a connection timeout or `UnknownHostException`.
-
-**Fix:** provision a local or managed PostgreSQL database and supply
-`SPRING_DATASOURCE_*`. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
+**Fix applied:** removed the host from `application.yml`. Provision a local or managed
+PostgreSQL database and supply `SPRING_DATASOURCE_*`. See
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## P1 — blocks reliable use
 
@@ -188,7 +168,7 @@ run".
 
 **Fix applied:** added 20 tests covering the two mappers, `RecipeRepository`, and the
 full HTTP API. They run on H2 in PostgreSQL mode via the `test` profile and never touch
-the configured remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
+a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
 instead of rendering the 500 body.
 
@@ -375,6 +355,8 @@ coordinates and any dependency references.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
+- No database credentials are committed; the datasource is supplied through
+  `SPRING_DATASOURCE_*` at runtime.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
   upsert, bulk, missing row, invalid UUID, PUT UUID mismatch, delete, shared-ingredient
   delete). The same behavior is expected on PostgreSQL, but it was not exercised against

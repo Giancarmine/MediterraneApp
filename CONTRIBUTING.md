@@ -23,8 +23,8 @@ it with a system Maven in build instructions.
 The tests use an in-memory H2 database and do not need PostgreSQL. `./mvnw -B verify`
 runs the same suite plus packaging, which is what CI executes.
 
-To run the API, override the datasource (the checked-in values are historical and
-unreachable):
+To run the API, provide the datasource through environment variables (no values are
+checked in):
 
 ```bash
 export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
@@ -95,6 +95,6 @@ See [`SECURITY.md`](SECURITY.md) for private reporting.
 - Do not rewrite history, force-push, or delete branches.
 - Do not upgrade to Spring Boot 3, switch to Jakarta, or migrate the schema as part of
   an unrelated fix.
-- Do not run tests against the configured remote database.
+- Do not point tests at a remote database.
 - Do not change the license.
 - Do not commit `target/`, IDE state, or generated files.
