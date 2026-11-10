@@ -64,16 +64,16 @@ src/main/java/com/ges/mediterraneapp/
 
 | Class | Responsibility | Notes |
 | --- | --- | --- |
-| `RecipeController` | HTTP routing, request validation, response status | Constructs `RecipeMapper` manually in its constructor. |
-| `RecipeService` | Find, create, update, delete recipes | No `@Transactional`. Throws `NoSuchElementException` on missing rows; mapped to `404`. |
-| `ApiExceptionHandler` | Maps handled exceptions to `400`/`404` JSON errors | One `@RestControllerAdvice`; keeps the default error field names. |
+| `RecipeController` | HTTP routing, request validation, response status | Constructor-injected `RecipeService` and `RecipeMapper`. |
+| `RecipeService` | Find, create, update, delete recipes | `upsertRecipe`, `upsertRecipes`, `updateRecipe`, and `deleteRecipe` are `@Transactional`. Throws `NoSuchElementException` on missing rows; mapped to `404`. |
+| `ApiExceptionHandler` | Maps handled exceptions to `400`/`404`/`409` JSON errors | One `@RestControllerAdvice`; keeps the default error field names. |
 | `IngredientService` | Find, create, update, delete ingredients | Not exposed through HTTP. |
-| `RecipeMapper` | Entity/DTO conversion and ingredient resolution | Calls `IngredientService` for each DTO ingredient. |
+| `RecipeMapper` | Entity/DTO conversion and ingredient resolution | Spring `@Component`; calls `IngredientService` for each DTO ingredient. |
 | `IngredientMapper` | Entity/DTO conversion | `toDto` is package-private. |
-| `RecipeRepository` | `findByUuid`, `findByName` | Derived queries. |
-| `IngredientRepository` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement` | The triple is not unique in the schema. |
+| `RecipeRepository` | `findByUuid`, `findByName`, `existsByIngredients_Uuid` | Derived queries. |
+| `IngredientRepository` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement` | The triple is unique in the schema. |
 | `StepRepository` | Unused | Misdeclared; see below. |
-| `Recipe` | Persistence model | Unidirectional many-to-many to ingredients; element collection for steps. |
+| `Recipe` | Persistence model | Unidirectional many-to-many to ingredients; element collection for steps; unique `name`. |
 | `Ingredient` | Persistence model | No back-reference to recipes. |
 | `RecipeDto` / `IngredientDto` | JSON contract | `@JsonInclude(NON_NULL)`, string UUIDs. |
 
@@ -94,45 +94,49 @@ There is no transaction annotation. Each repository call runs in its own transac
 
 ### Create or update a recipe
 
-1. Jackson 3 deserializes the body into `RecipeDto`.
-2. `RecipeController.createRecipe` calls `RecipeService.findRecipeByName`.
-   - A miss returns `new Recipe()` rather than an empty `Optional`.
-   - A hit returns the existing entity.
-3. If the existing entity has a UUID, the controller keeps it as the update target. For
-   a brand-new recipe, a client-supplied UUID is applied to the new entity.
-4. `RecipeMapper.updateModel` never rewrites the entity UUID:
+1. Jackson 3 deserializes the body into `RecipeDto`; `@Valid` enforces the constraints
+   before the service is called.
+2. `RecipeService.upsertRecipe` runs in a transaction.
+3. `doUpsert` looks the recipe up by `name`:
+   - a miss creates a new entity;
+   - a hit returns the existing entity.
+4. For a brand-new recipe, a client-supplied UUID is applied to the new entity.
+5. `RecipeMapper.updateModel` never rewrites the entity UUID:
    - copies every scalar field, including nulls;
    - replaces `steps` only when the request field is non-null;
    - for each `IngredientDto`, calls
      `IngredientService.findIngredientByNameAndAmountAndMeasurement`;
    - a miss returns a new transient `Ingredient(name, amount, measurement)`.
-5. `RecipeService.createRecipe` calls `save`.
-6. `CascadeType.ALL` persists new ingredients and the join rows.
+6. `save` persists the recipe. The `PERSIST`/`MERGE` cascade persists new ingredients and
+   the join rows.
 7. The saved entity is mapped back to a DTO and returned with `201 Created` on create or
    `200 OK` on update.
 
 Consequences:
 
 - `POST` is an upsert keyed by `name`.
-- `@NotBlank` on `RecipeDto.name` and `IngredientDto.nameIngredient` makes `@Valid`
-  effective; violations return `400` through `ApiExceptionHandler`.
-- The whole operation is not wrapped in a service-level transaction; `save` cascades in
-  its own transaction. New ingredients are persisted as part of that save.
-- A failure part-way through a bulk request leaves earlier items committed.
+- `@NotBlank` and `@Size` on the DTOs make `@Valid` effective; violations return `400`
+  through `ApiExceptionHandler`.
+- `recipe.name` is unique. Concurrent creates that race on the same name fail the
+  constraint; `ApiExceptionHandler` maps `DataIntegrityViolationException` to a generic
+  `409 Conflict`.
+- `upsertRecipes` handles the whole bulk body in one transaction. Validation still runs
+  first, so an invalid item fails the request before any write; a persistence failure
+  rolls back every item.
 
 ### Delete a recipe
 
-1. `RecipeService.findRecipeByUuid` loads the entity.
-2. `delete` removes it.
-3. `CascadeType.ALL` cascades `REMOVE` to the ingredient set. Unshared ingredients are
-   deleted with the recipe.
-4. If an ingredient is referenced by another recipe, the foreign key blocks the
-   cascade. The request returns 500 and the transaction rolls back, so the recipe is
-   not deleted.
+1. `RecipeService.deleteRecipe` runs in a transaction and loads the entity.
+2. It snapshots the ingredient set, deletes the recipe, and flushes so the join rows are
+   gone.
+3. Every snapshotted ingredient that no remaining recipe references
+   (`existsByIngredients_Uuid`) is deleted.
+4. Ingredients still referenced by another recipe are left in place. The request returns
+   `200 OK` with `"OK"` in all cases, and `404 Not Found` when the recipe is absent.
 
-This is the most dangerous behavior in the current model, and it makes deletion
-unreliable as soon as ingredients are shared. Reduce the cascade and clean up join rows
-explicitly in a dedicated change.
+The cascade is `PERSIST`/`MERGE` only, so deleting a recipe never deletes a shared
+ingredient. The trade-off is that the orphan cleanup is explicit rather than a database
+cascade.
 
 ## Persistence model
 
@@ -170,13 +174,15 @@ Details:
   There are no migration scripts, so schema changes are implicit and not reviewable.
 - `Recipe.steps` is an `@ElementCollection` of `String` values with
   `@Column(length = 2500)`.
-- `Recipe.ingredients` is an unidirectional `@ManyToMany(cascade = CascadeType.ALL)`.
-  `Ingredient` has no `mappedBy` side.
+- `Recipe.ingredients` is a unidirectional `@ManyToMany(cascade = { PERSIST, MERGE })`.
+  `Ingredient` has no `mappedBy` side. `REMOVE` is intentionally absent; deletion
+  cleans up join rows and orphan ingredients explicitly.
 - `createdAt` and `updatedAt` use Hibernate's `@CreationTimestamp` and
   `@UpdateTimestamp`. `AuditingEntityListener` is declared, but `@EnableJpaAuditing` is
   not present and is not needed for these annotations.
-- The ingredient lookup key `(nameIngredient, amount, measurement)` has no database
-  unique constraint. Duplicate rows can make the derived query throw.
+- Unique constraints: `uk_recipe_name` on `recipe.name`, and `uk_ingredient_identity` on
+  `(name_ingredient, amount, measurement)`. Existing duplicate rows must be cleaned up
+  before `ddl-auto: update` can add these constraints.
 - There is no pagination or sorting; list endpoints use `findAll()`.
 
 ## Configuration and startup
@@ -204,12 +210,12 @@ missing or the database is unreachable, startup fails; there is no graceful degr
 | DTO/entity separation | The JSON contract is independent of the schema, but requires manual mapping. |
 | Hand-written mappers | No annotation processor or magic; more code to maintain. History shows MapStruct was tried and removed. |
 | UUID primary keys | Safe for distributed creation and public URLs; slightly larger indexes. |
-| `POST` upsert by name | Simple client workflow, but ambiguous names collide. Returns `201` on create and `200` on update. |
-| `CascadeType.ALL` on ingredients | Easy creation; dangerous deletion and no explicit ownership. |
+| `POST` upsert by name | Simple client workflow, but ambiguous names collide. Returns `201` on create and `200` on update. A unique constraint turns the race into a `409`. |
+| `PERSIST`/`MERGE` cascade on ingredients | Ingredient rows are never silently deleted as a side effect; deletion must clean up orphans explicitly. |
 | Hibernate `ddl-auto: update` | Zero setup; unsuitable for production because changes are implicit and destructive changes are not handled. |
 | No service interfaces | Less ceremony for a small app; harder to swap implementations. |
-| Constructor-built mapper | Works, but bypasses Spring dependency injection and makes `@WebMvcTest` awkward. |
-| Global exception handler | `ApiExceptionHandler` maps handled exceptions to `400`/`404`; unexpected failures still surface as `500`. |
+| Mapper as a Spring bean | Constructor injection and testability; mapper and service form the only cyclic-free collaboration. |
+| Global exception handler | `ApiExceptionHandler` maps handled exceptions to `400`/`404`/`409`; unexpected failures still surface as `500`. |
 
 ## Extension points
 
@@ -219,13 +225,13 @@ Safe, additive work:
 - Add pagination to `GET /recipe` (document the new parameters).
 - Add `spring-boot-starter-actuator` with only `health` and `info` exposed.
 - Add Flyway or Liquibase and switch `ddl-auto` to `validate`.
-- Add tests and CI.
 
 Changes that need an explicit decision:
 
 - Upgrading or downgrading Spring Boot (the code uses the `jakarta.*` namespace).
 - Changing the upsert key from `name` to `uuid`.
-- Reducing the ingredient cascade (data migration implications).
+- Changing the ingredient ownership/cleanup strategy (for example, deleting an
+  ingredient that a recipe update no longer references; see `DATA-4`).
 - Adding authentication or a browser frontend.
 - Moving to a multi-module build.
 

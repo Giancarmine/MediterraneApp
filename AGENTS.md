@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 15 main Java files, about 500 lines, 24 tests |
+| Size | 16 main Java files, about 600 lines, 31 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -38,8 +38,9 @@ consumed.
 - The test suite covers the mappers, the repository, and the HTTP API. It runs against
   H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs no database.
 - `ApiExceptionHandler` is the single `@RestControllerAdvice`. It maps
-  `NoSuchElementException` to `404`, and `IllegalArgumentException` plus Bean Validation
-  failures to `400`, using the same error field names as Spring Boot's default body.
+  `NoSuchElementException` to `404`, `IllegalArgumentException` plus Bean Validation
+  failures to `400`, and `DataIntegrityViolationException` to a generic `409`, using the
+  same error field names as Spring Boot's default body.
 - `src/main/resources/application.yml` contains no database credentials. Supply the
   datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
   application will not start without it.
@@ -192,7 +193,7 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | --- | --- |
 | `src/main/java/com/ges/mediterraneapp/MediterraneappApplication.java` | Spring Boot entry point. |
 | `controller/RecipeController.java` | The only controller. All `/recipe` endpoints. |
-| `controller/ApiExceptionHandler.java` | Global exception mapping to `400`/`404` JSON errors. |
+| `controller/ApiExceptionHandler.java` | Global exception mapping to `400`/`404`/`409` JSON errors. |
 | `controller/ApiError.java` | Error response body record. |
 | `service/RecipeService.java` | Recipe lookup, create, update, delete. |
 | `service/IngredientService.java` | Ingredient lookup, create, update, delete. No controller exposes it yet. |
@@ -200,7 +201,7 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `mapper/IngredientMapper.java` | Entity/DTO mapping for ingredients. |
 | `model/dao/Recipe.java` | JPA entity: recipe, steps, ingredient relation, timestamps. |
 | `model/dao/Ingredient.java` | JPA entity: amount, measurement, ingredient name, timestamps. |
-| `model/dao/repository/RecipeRepository.java` | `findByUuid`, `findByName`. |
+| `model/dao/repository/RecipeRepository.java` | `findByUuid`, `findByName`, `existsByIngredients_Uuid`. |
 | `model/dao/repository/IngredientRepository.java` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement`. |
 | `model/dao/repository/StepRepository.java` | Unused, malformed placeholder; see known issues. |
 | `model/dto/RecipeDto.java` | JSON shape for recipes; `NON_NULL` inclusion. |
@@ -217,8 +218,9 @@ the only `@RestControllerAdvice`.
 3. `RecipeMapper.updateModel` copies fields and resolves each `IngredientDto` through
    `IngredientService.findIngredientByNameAndAmountAndMeasurement`. A missing ingredient
    becomes a new transient `Ingredient`. It never changes the entity UUID.
-4. `RecipeService` saves the entity. `CascadeType.ALL` on the ingredient relation
-   persists new ingredients and join rows. Validation runs before this step.
+4. `RecipeService` saves the entity inside a `@Transactional` method.
+   `PERSIST`/`MERGE` on the ingredient relation persists new ingredients and join rows.
+   Validation runs before this step.
 5. `RecipeMapper.toDto` converts the saved entity back to JSON.
 
 Reads are simpler: controller → service → repository → mapper → DTO.
@@ -230,13 +232,13 @@ Reads are simpler: controller → service → repository → mapper → DTO.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `uuid` | `UUID` | Primary key, generated (`uuid2`). Exposed as a string. |
-| `name` | `String` | Used as the de facto upsert key by `POST /recipe`. |
+| `name` | `String` | Unique (`uk_recipe_name`); used as the upsert key by `POST /recipe`. |
 | `relations` | `String` | Free-text field; meaning is undocumented. |
 | `preparedTime` | `String` | Free text, not a duration type. |
 | `cookedTime` | `String` | Free text. |
 | `totalTime` | `String` | Free text. |
 | `steps` | `Set<String>` | `@ElementCollection`, column length 2500. |
-| `ingredients` | `Set<Ingredient>` | Unidirectional `@ManyToMany(cascade = ALL)`. |
+| `ingredients` | `Set<Ingredient>` | Unidirectional `@ManyToMany(cascade = { PERSIST, MERGE })`. |
 | `createdAt` | `Date` | Hibernate `@CreationTimestamp`. |
 | `updatedAt` | `Date` | Hibernate `@UpdateTimestamp`. |
 
@@ -247,18 +249,18 @@ Reads are simpler: controller → service → repository → mapper → DTO.
 | `uuid` | `UUID` | Primary key, generated. |
 | `amount` | `String` | Free text (`"2"`, `"a pinch"`). |
 | `measurement` | `String` | Free text (`"kg"`, `"tbsp"`). |
-| `nameIngredient` | `String` | Ingredient name; not unique. |
+| `nameIngredient` | `String` | Ingredient name; part of the unique identity triple. |
 | `createdAt` / `updatedAt` | `Date` | Hibernate timestamps. |
 
 Important persistence facts:
 
-- The ingredient lookup key is the triple `(nameIngredient, amount, measurement)`, but
-  the database has no unique constraint on it. Duplicate rows make the repository method
-  throw `IncorrectResultSizeDataAccessException`.
-- `CascadeType.ALL` includes `REMOVE`: deleting a recipe deletes its unshared
-  ingredients. If an ingredient is shared with another recipe, the foreign key blocks
-  the delete, the request returns 500, and the transaction rolls back. Do not change
-  this behavior without understanding the data.
+- The ingredient identity is the unique triple `(name_ingredient, amount, measurement)`
+  (`uk_ingredient_identity`). Existing duplicate rows must be cleaned up before the
+  constraint can be applied.
+- `CascadeType.ALL` is not used. `PERSIST`/`MERGE` create ingredients, but `REMOVE` is
+  absent. `RecipeService.deleteRecipe` deletes join rows and then deletes only
+  ingredients that no recipe still references. Shared ingredients are kept, and the
+  request returns `200` instead of `500`.
 - `steps` and the many-to-many join table are created by Hibernate with generated names.
 - There is no pagination; `GET /recipe` loads the whole table.
 
@@ -283,13 +285,17 @@ Current behavior that must be preserved unless the owner asks for a breaking cha
   `200 OK` on update.
 - `PUT /recipe/{uuid}` keeps the loaded entity's UUID. The body `uuid` is optional; a
   mismatch returns `400 Bad Request` and leaves the row unchanged.
-- `@NotBlank` on `RecipeDto.name` and `IngredientDto.nameIngredient` makes `@Valid`
-  effective. Violations return `400 Bad Request`.
+- `@NotBlank` and `@Size` on `RecipeDto` and `IngredientDto` make `@Valid` effective.
+  Violations return `400 Bad Request`. Limits: recipe name 255, ingredient fields 255,
+  each step 2500 characters.
 - Missing rows throw `NoSuchElementException`, mapped to `404 Not Found`. Invalid UUID
   strings throw `IllegalArgumentException`, mapped to `400 Bad Request`.
-- `DELETE /recipe/{uuid}` cascades `REMOVE` to ingredients. An ingredient shared with
-  another recipe causes a foreign-key violation and a 500 response that rolls back the
-  delete.
+- `recipe.name` and the ingredient triple are unique. A constraint violation is mapped
+  to `409 Conflict` with a generic message.
+- `DELETE /recipe/{uuid}` removes join rows and deletes only ingredients no other recipe
+  references. Shared ingredients are kept; the response is `200 OK` with `"OK"`.
+- `POST /recipe/bulk` runs in one transaction: an invalid item fails validation before
+  any write, and a persistence failure rolls back the whole batch.
 - Returning `HttpStatus` from a `@RestController` method writes the enum name as the
   JSON response body instead of setting the response status. `JacksonConfig` pins that
   name (`name()` rather than Jackson 3's `toString()`).
@@ -304,12 +310,14 @@ Current behavior that must be preserved unless the owner asks for a breaking cha
   getters/setters that Lombok already generates.
 - **DTOs:** UUIDs are strings at the boundary. `@JsonInclude(NON_NULL)` means null
   fields are omitted. Do not expose entities directly.
-- **Mappers:** plain classes, constructed in the controller for `RecipeMapper`.
-  `IngredientMapper.toDto` is package-private on purpose. If you convert mappers to
-  Spring beans, do it in a dedicated change and update this file.
+- **Mappers:** hand-written. `RecipeMapper` is a Spring `@Component` injected into the
+  controller and service; `IngredientMapper` is still instantiated directly, and its
+  `toDto` is package-private on purpose. Do not reintroduce MapStruct.
+- **Transactions:** service methods that write more than one entity are
+  `@Transactional`; controllers never are. `upsertRecipes` is all-or-nothing.
 - **Repositories:** Spring Data derived queries; no JPQL or native SQL yet.
-- **Controllers:** constructor injection is preferred for new code. The existing
-  `@Autowired` fields in `RecipeController` are redundant but harmless.
+- **Controllers:** constructor injection is preferred. `RecipeController` no longer uses
+  `@Autowired` fields; keep it that way.
 - **Errors:** keep exception handling in `ApiExceptionHandler`, the single
   `@RestControllerAdvice`; do not add try/catch blocks to each endpoint. Add new mappings
   there and document the resulting status codes.
@@ -322,17 +330,21 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (24 tests):
+Current coverage (31 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
   rewrites the entity UUID.
-- `model/dao/repository/RecipeRepositoryTest` — `@DataJpaTest` lookups by UUID and name.
+- `model/dao/repository/RecipeRepositoryTest` — `@DataJpaTest` lookups by UUID and name,
+  plus the unique-name constraint.
+- `model/dao/repository/IngredientRepositoryTest` — unique ingredient identity triple.
+- `controller/ApiExceptionHandlerTest` — `409` mapping without leaking database details.
 - `RecipeApiIntegrationTest` — full HTTP behavior with `@SpringBootTest(RANDOM_PORT)`
   and `TestRestTemplate`, so error responses go through the real error dispatch. It
-  covers status, create, list, get, missing row (404), invalid UUID (400), bulk,
-  upsert-by-name (200 on update), validation (400), PUT with matching/omitted/mismatched
-  UUID, delete, and shared-ingredient rollback (500).
+  covers status, create, list, get, missing row (404), invalid UUID (400), bulk, bulk
+  rollback, upsert-by-name (200 on update), validation (400, including overlong and
+  blank fields), PUT with matching/omitted/mismatched UUID, delete, delete 404, orphan
+  cleanup, and shared-ingredient delete (200, ingredient kept).
 
 Guidance:
 
@@ -353,8 +365,8 @@ Guidance:
 - No endpoint has authentication or authorization. Do not expose this API publicly
   without adding both.
 - No CORS configuration exists. Add it explicitly if a browser client is introduced.
-- Input validation is limited to `@NotBlank` on recipe and ingredient names. Add further
-  constraints deliberately and document the new `400` responses.
+- Input validation uses `@NotBlank` and `@Size` on the DTOs. Add further constraints
+  deliberately and document the new `400` responses.
 - Never log request bodies blindly; they can contain data that should not be retained.
 - Do not commit `.env`, keystores, or real database credentials. `.gitignore`
   excludes `.env`; `.env.example` contains placeholders only.
@@ -366,9 +378,10 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. `DELETE` of a recipe with a shared ingredient returns 500 and rolls back.
-3. `StepRepository` is unused and malformed.
-4. Dockerfile relies on a wildcard copy for the packaged JAR.
+2. `StepRepository` is unused and malformed.
+3. Dockerfile relies on a wildcard copy for the packaged JAR.
+4. Updating a recipe can orphan ingredients that the previous version referenced
+   (`DATA-4`); deletion cleanups do not cover this path.
 5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 

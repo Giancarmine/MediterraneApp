@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface RecipeRepository extends JpaRepository<Recipe, UUID> {
     Optional<Recipe> findByUuid (UUID uuid);
     Optional<Recipe> findByName (String name);
+    boolean existsByIngredients_Uuid (UUID uuid);
 }

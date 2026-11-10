@@ -1,9 +1,7 @@
 package com.ges.mediterraneapp.controller;
 
 import com.ges.mediterraneapp.mapper.RecipeMapper;
-import com.ges.mediterraneapp.model.dao.Recipe;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
-import com.ges.mediterraneapp.service.IngredientService;
 import com.ges.mediterraneapp.service.RecipeService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -11,22 +9,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/recipe")
 public class RecipeController {
     private final RecipeService recipeService;
-    private final IngredientService ingredientService;
-
     private final RecipeMapper recipeMapper;
 
-    public RecipeController(RecipeService recipeService, IngredientService ingredientService) {
+    public RecipeController(RecipeService recipeService, RecipeMapper recipeMapper) {
         this.recipeService = recipeService;
-        this.ingredientService = ingredientService;
-
-        this.recipeMapper = new RecipeMapper(this.ingredientService);
+        this.recipeMapper = recipeMapper;
     }
 
     @GetMapping("/status")
@@ -48,32 +41,20 @@ public class RecipeController {
 
     @PostMapping
     public ResponseEntity<RecipeDto> createRecipe (@Valid @RequestBody RecipeDto recipeDto) {
-        Recipe recipe = recipeService.findRecipeByName(recipeDto.getName());
-        boolean exists = recipe.getUuid() != null;
-
-        if (!exists && recipeDto.getUuid() != null) {
-            recipe.setUuid(UUID.fromString(recipeDto.getUuid()));
-        }
-
-        Recipe saved = recipeService.createRecipe(recipeMapper.updateModel(recipeDto, recipe));
-        return new ResponseEntity<>(recipeMapper.toDto(saved), exists ? HttpStatus.OK : HttpStatus.CREATED);
+        RecipeService.UpsertResult result = recipeService.upsertRecipe(recipeDto);
+        return new ResponseEntity<>(recipeMapper.toDto(result.recipe()),
+                result.created() ? HttpStatus.CREATED : HttpStatus.OK);
     }
 
     @PostMapping("/bulk")
     public HttpStatus createRecipes (@RequestBody List<@Valid RecipeDto> recipes) {
-        recipes.forEach(this::createRecipe);
+        recipeService.upsertRecipes(recipes);
         return HttpStatus.CREATED;
     }
 
     @PutMapping("/{uuid}")
     public ResponseEntity<RecipeDto> updateRecipe (@PathVariable String uuid, @Valid @RequestBody RecipeDto recipeDto) {
-        Recipe recipe = recipeService.findRecipeByUuid(uuid);
-
-        if (recipeDto.getUuid() != null && !UUID.fromString(recipeDto.getUuid()).equals(recipe.getUuid())) {
-            throw new IllegalArgumentException("Body uuid must match the path uuid");
-        }
-
-        return new ResponseEntity<>(recipeMapper.toDto(recipeService.updateRecipe(recipeMapper.updateModel(recipeDto, recipe))), HttpStatus.OK);
+        return new ResponseEntity<>(recipeMapper.toDto(recipeService.updateRecipe(uuid, recipeDto)), HttpStatus.OK);
     }
 
     @DeleteMapping("/{uuid}")

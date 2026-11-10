@@ -145,18 +145,22 @@ recipe when an existing `name` is updated. Both include the recipe `uuid`.
 
 Behavior:
 
-- The controller calls `RecipeService.findRecipeByName`.
+- The service looks up the recipe by `name` inside the request transaction.
 - If a recipe with that name exists, the existing entity is updated and the response is
   `200 OK`.
 - If no recipe exists, a new entity is created and the response is `201 Created`. A
   client-supplied `uuid` is accepted only in this new-name path.
+- `name` is unique. A concurrent create that loses the race fails the unique constraint
+  and returns `409 Conflict`.
 - Ingredients are resolved by the exact triple
   `(nameIngredient, amount, measurement)`. A missing triple becomes a new ingredient
-  and is persisted through `CascadeType.ALL`.
+  and is persisted through the `PERSIST`/`MERGE` cascade.
 - Scalar fields are copied unconditionally, so omitting one on an update sets it to
   `null`. `steps` and `ingredients` are only replaced when the field is present;
   omitting them keeps the existing collection.
-- `name` must not be blank and each ingredient's `nameIngredient` must not be blank.
+- Validation: `name` must not be blank and at most 255 characters; each ingredient's
+  `nameIngredient` must not be blank and at most 255 characters; `amount` and
+  `measurement` are limited to 255 characters; each step is limited to 2500 characters.
   Violations return `400 Bad Request` before persistence. Syntactically invalid JSON is
   rejected earlier by Jackson with `400`.
 
@@ -183,13 +187,13 @@ Content-Type: application/json
 
 The method returns `HttpStatus.CREATED` from a `@RestController`, so the status stays
 `200` and the JSON body is the string `"CREATED"`. Request validation applies to every
-item; an invalid item returns `400 Bad Request` before any item is processed. There is
-no transaction around the loop, so a failure during processing can leave earlier items
-saved.
+item; an invalid item returns `400 Bad Request` before any item is processed. The whole
+batch is one transaction: a persistence failure rolls back every item, so the endpoint is
+all-or-nothing. A conflict with an existing unique value returns `409 Conflict`.
 
 ### `PUT /recipe/{uuid}`
 
-Updates a recipe. The path UUID identifies the entity; the body should repeat it.
+Updates a recipe. The path UUID identifies the entity; the body `uuid` is optional.
 
 ```bash
 curl -i -X PUT http://localhost:8080/recipe/3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81 \
@@ -229,11 +233,9 @@ Content-Type: application/json
 - `200 OK` with `"OK"` when the recipe is deleted.
 - `404 Not Found` when the UUID does not exist.
 - `400 Bad Request` when the UUID is invalid.
-- Because the ingredient relation uses `CascadeType.ALL`, deleting a recipe also
-  deletes its unshared ingredient rows.
-- If any ingredient is shared with another recipe, the foreign key blocks the cascade:
-  the request returns `500` with a constraint-violation message and the transaction
-  rolls back, so the recipe remains. Verified against PostgreSQL-compatible H2.
+- Deleting a recipe removes the recipe and its join rows. Ingredients that are no longer
+  referenced by any recipe are deleted; ingredients still referenced by another recipe
+  are kept. A shared ingredient no longer blocks the delete or returns `500`.
 
 ## Ingredient API
 
@@ -249,6 +251,7 @@ a recipe payload. Adding a public ingredient API is an additive change, not a re
 - `IllegalArgumentException` → `400 Bad Request`
 - `MethodArgumentNotValidException`, `HandlerMethodValidationException`, and
   `ConstraintViolationException` → `400 Bad Request`
+- `DataIntegrityViolationException` → `409 Conflict` with a generic message
 
 A missing recipe produces:
 
@@ -262,8 +265,18 @@ A missing recipe produces:
 }
 ```
 
-Unhandled exceptions, such as the shared-ingredient foreign-key violation on `DELETE`,
-still use Spring Boot's default error body, which has the same top-level keys.
+Unhandled exceptions still use Spring Boot's default error body, which has the same
+top-level keys. A conflict response deliberately omits the database detail:
+
+```json
+{
+  "timestamp": "2026-11-09T14:10:23.026Z",
+  "status": 409,
+  "error": "Conflict",
+  "message": "Request conflicts with existing data",
+  "path": "/recipe"
+}
+```
 
 Do not build clients that depend on the exact `message` text.
 `spring.web.error.include-message: always` in `application.yml` preserves the pre-upgrade
@@ -276,6 +289,9 @@ is a concern.
 - Add new fields as optional and non-null-safe on read.
 - The upsert-by-name behavior of `POST /recipe` is deliberate; changing the key needs a
   migration plan. `POST` returns `200` for an update and `201` for a create.
+- `recipe.name` and the ingredient triple `(nameIngredient, amount, measurement)` are
+  unique constraints. Existing duplicate rows must be cleaned up before those constraints
+  can be applied.
 - The path UUID is authoritative for `PUT /recipe/{uuid}`; a mismatched body UUID is a
   `400`.
 - Keep the validation rules and their `400` responses in sync with this document.
