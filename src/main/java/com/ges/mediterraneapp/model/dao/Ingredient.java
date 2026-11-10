@@ -16,7 +16,9 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "ingredient")
+@Table(name = "ingredient", uniqueConstraints = @UniqueConstraint(
+        name = "uk_ingredient_identity",
+        columnNames = { "name_ingredient", "amount", "measurement" }))
 @EntityListeners(AuditingEntityListener.class)
 public class Ingredient {
     @Id
@@ -27,6 +29,7 @@ public class Ingredient {
 
     private String amount;
     private String measurement;
+    @Column(name = "name_ingredient")
     private String nameIngredient;
 
     @Column(name = "created_at", nullable = false, updatable = false)

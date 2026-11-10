@@ -4,11 +4,13 @@ import com.ges.mediterraneapp.model.dao.Recipe;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @ActiveProfiles("test")
@@ -40,5 +42,18 @@ class RecipeRepositoryTest {
     void returnsEmptyOptionalWhenNothingMatches() {
         assertThat(recipeRepository.findByUuid(UUID.randomUUID())).isEmpty();
         assertThat(recipeRepository.findByName("does not exist")).isEmpty();
+    }
+
+    @Test
+    void rejectsDuplicateRecipeNames() {
+        Recipe first = new Recipe();
+        first.setName("duplicate-name");
+        recipeRepository.saveAndFlush(first);
+
+        Recipe second = new Recipe();
+        second.setName("duplicate-name");
+
+        assertThatThrownBy(() -> recipeRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

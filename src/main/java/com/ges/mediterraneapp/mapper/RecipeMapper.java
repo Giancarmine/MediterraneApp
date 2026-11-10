@@ -5,14 +5,14 @@ import com.ges.mediterraneapp.model.dao.Recipe;
 import com.ges.mediterraneapp.model.dto.IngredientDto;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
 import com.ges.mediterraneapp.service.IngredientService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
 
+@Component
 public class RecipeMapper {
-    @Autowired
     private final IngredientService ingredientService;
 
     private final IngredientMapper ingredientMapper;

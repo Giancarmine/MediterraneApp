@@ -1,5 +1,6 @@
 package com.ges.mediterraneapp;
 
+import com.ges.mediterraneapp.model.dao.repository.IngredientRepository;
 import com.ges.mediterraneapp.model.dao.repository.RecipeRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,9 @@ class RecipeApiIntegrationTest {
 
     @Autowired
     private RecipeRepository recipeRepository;
+
+    @Autowired
+    private IngredientRepository ingredientRepository;
 
     @Test
     void statusReturnsTeapotJsonString() {
@@ -161,6 +165,17 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
+    void createRecipeWithTooLongNameReturns400() {
+        ResponseEntity<String> response = postJson("/recipe", """
+                {"name":"%s","ingredients":[]}
+                """.formatted("a".repeat(256)));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("name");
+    }
+
+    @Test
     void bulkCreateWithBlankNameReturns400() {
         ResponseEntity<String> response = postJson("/recipe/bulk", """
                 [{"name":"   ","ingredients":[]}]
@@ -169,6 +184,21 @@ class RecipeApiIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertJson(response);
         assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("blank");
+    }
+
+    @Test
+    void bulkCreateWithInvalidItemWritesNothing() {
+        String validName = unique("BulkAtomicValid");
+        String body = "[" + recipeJson(validName, unique("BulkAtomicIngredient")) + ","
+                + """
+                {"name":"   ","ingredients":[]}
+                """ + "]";
+
+        ResponseEntity<String> response = postJson("/recipe/bulk", body);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(recipeRepository.findByName(validName)).isEmpty();
     }
 
     @Test
@@ -247,22 +277,45 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
-    void deleteRecipeWithSharedIngredientReturns500AndKeepsBothRecipes() {
+    void deleteMissingRecipeReturns404() {
+        ResponseEntity<String> response = delete("/recipe/{uuid}", UUID.randomUUID());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("Recipe not found");
+    }
+
+    @Test
+    void deleteRecipeRemovesUnsharedIngredients() {
+        String uuid = createRecipe(unique("OrphanOwner"), unique("OrphanIngredient"));
+        String ingredientUuid = readIngredientUuid(uuid);
+
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(ingredientUuid))).isPresent();
+
+        ResponseEntity<String> response = delete("/recipe/{uuid}", uuid);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(ingredientUuid))).isEmpty();
+    }
+
+    @Test
+    void deleteRecipeWithSharedIngredientKeepsBothRecipesAndTheIngredient() {
         String sharedIngredient = unique("SharedSalt");
         String firstUuid = createRecipe(unique("SharedFirst"), sharedIngredient);
         String secondUuid = createRecipe(unique("SharedSecond"), sharedIngredient);
+        String ingredientUuid = readIngredientUuid(firstUuid);
 
         ResponseEntity<String> response = delete("/recipe/{uuid}", firstUuid);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertJson(response);
-        assertThat(JsonPath.<String>read(response.getBody(), "$.message"))
-                .contains("constraint");
+        assertThat(response.getBody()).isEqualTo("\"OK\"");
 
         assertThat(rest.getForEntity("/recipe/{uuid}", String.class, firstUuid).getStatusCode())
-                .isEqualTo(HttpStatus.OK);
+                .isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(rest.getForEntity("/recipe/{uuid}", String.class, secondUuid).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(ingredientUuid))).isPresent();
     }
 
     private String createRecipe(String name, String ingredientName) {
@@ -271,6 +324,13 @@ class RecipeApiIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertJson(response);
         return JsonPath.read(response.getBody(), "$.uuid");
+    }
+
+    private String readIngredientUuid(String recipeUuid) {
+        ResponseEntity<String> response = rest.getForEntity("/recipe/{uuid}", String.class, recipeUuid);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return JsonPath.read(response.getBody(), "$.ingredients[0].uuid");
     }
 
     private ResponseEntity<String> postJson(String path, String body) {

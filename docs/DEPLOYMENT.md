@@ -48,7 +48,11 @@ datasource through the environment; the paths below are templates.
    ```
 
 The first startup creates the tables because `spring.jpa.hibernate.ddl-auto=update`.
-There are no migration scripts.
+There are no migration scripts. Existing databases must be cleaned up before this version
+starts: `recipe.name` now carries a unique constraint (`uk_recipe_name`) and the ingredient
+triple `(name_ingredient, amount, measurement)` carries `uk_ingredient_identity`.
+`ddl-auto: update` does not reconcile data that violates a new constraint, so delete or
+merge duplicates first; otherwise the schema update fails at startup.
 
 ### Using `.env`
 
@@ -74,6 +78,8 @@ Other current settings:
 - Hikari: `connectionTimeout=20000`, `maximumPoolSize=5`.
 - `spring.jpa.show-sql=true`.
 - `spring.jpa.hibernate.ddl-auto=update`.
+- Unique constraints: `uk_recipe_name` and `uk_ingredient_identity`. Deduplicate existing
+  data before deploying this version.
 - Hibernate dialect is misspelled and nested under the wrong key; Hibernate
   auto-detects the dialect, so this is harmless today. Fix it in a dedicated change.
 

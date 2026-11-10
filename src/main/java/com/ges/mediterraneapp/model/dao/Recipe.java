@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Entity
 @Data
-@Table(name = "recipe")
+@Table(name = "recipe", uniqueConstraints = @UniqueConstraint(name = "uk_recipe_name", columnNames = "name"))
 @EntityListeners(AuditingEntityListener.class)
 public class Recipe {
     @Id
@@ -32,7 +32,7 @@ public class Recipe {
     @Column(length=2500)
     Set<String> steps;
 
-    @ManyToMany(cascade = CascadeType.ALL)
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
     Set<Ingredient> ingredients;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -36,13 +36,16 @@
 - `GET /recipe/status` -> HTTP 200 body `"I_AM_A_TEAPOT"`.
 - `GET /recipe` -> all recipes.
 - `GET /recipe/{uuid}` -> one recipe; 404 if absent, 400 for an invalid UUID.
-- `POST /recipe` -> create or update by `name`; 201 on create, 200 on update.
-- `POST /recipe/bulk` -> batch create/update, HTTP 200 body `"CREATED"`.
+- `POST /recipe` -> create or update by `name`; 201 on create, 200 on update, 409 on a
+  unique-name conflict.
+- `POST /recipe/bulk` -> batch create/update in one transaction, HTTP 200 body
+  `"CREATED"`.
 - `PUT /recipe/{uuid}` -> update; the path UUID is authoritative, an optional body UUID
   must match (otherwise 400).
-- `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`; 404 if absent.
+- `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`; 404 if absent. Shared
+  ingredients are kept.
 - Errors use `timestamp`, `status`, `error`, `message`, and `path`; validation failures
-  are 400.
+  are 400 and unique-constraint conflicts are 409.
 
 ## Safety
 

@@ -21,21 +21,22 @@ Severity:
 | API-2 | P1 | Validation was a no-op | **Fixed** |
 | API-3 | P1 | `PUT` required the body UUID to match the path | **Fixed** |
 | API-4 | P1 | `POST` upserted by name and reported 201 for updates | **Fixed** |
-| DATA-1 | P1 | Cascade delete breaks when ingredients are shared | Open |
+| DATA-1 | P1 | Cascade delete breaks when ingredients are shared | **Fixed** |
 | DEV-1 | P1 | No tests | **Fixed** |
 | DEV-2 | P1 | No CI | **Fixed** |
 | DEV-3 | P3 | Maven wrapper was incomplete | **Fixed** |
 | DEV-4 | P1 | Jasypt 2.0.0 could not be resolved | **Fixed** |
 | CODE-1 | P2 | `StepRepository` is malformed and unused | Open |
-| DATA-2 | P2 | Ingredient triple has no unique constraint | Open |
+| DATA-2 | P2 | Ingredient triple has no unique constraint | **Fixed** |
 | DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
+| DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | Open |
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | Open |
 | OPS-3 | P2 | No auth, CORS, actuator, or rate limiting | Open |
 | API-5 | P2 | No pagination on `GET /recipe` | Open |
-| API-6 | P2 | `POST /recipe/bulk` is not transactional | Open |
+| API-6 | P2 | `POST /recipe/bulk` was not transactional | **Fixed** |
 | CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | Open |
-| DEV-5 | P2 | Mapper is constructed manually in the controller | Open |
-| DEV-6 | P3 | `@Autowired` on final fields is redundant | Open |
+| DEV-5 | P2 | Mapper is constructed manually in the controller | **Fixed** |
+| DEV-6 | P3 | `@Autowired` on final fields was redundant | **Fixed** |
 | SEC-2 | P3 | Jasypt carried a low-severity advisory | **Fixed** |
 | REPO-1 | P3 | `mediterraneapp.iml` was tracked | **Fixed** |
 | REPO-2 | P3 | `HELP.md` is stale generated output | Open |
@@ -81,10 +82,12 @@ declared no constraints. Payloads with missing or empty fields reached Hibernate
 syntactically invalid JSON was rejected earlier by Jackson.
 
 **Fix applied:** `RecipeDto.name` and `IngredientDto.nameIngredient` are `@NotBlank`,
-and `RecipeDto.ingredients` cascades validation. The bulk endpoint uses
+`@Size` limits cap recipe name and ingredient fields at 255 characters and each step at
+2500, and `RecipeDto.ingredients` cascades validation. The bulk endpoint uses
 `List<@Valid RecipeDto>`. `ApiExceptionHandler` maps `MethodArgumentNotValidException`,
 `HandlerMethodValidationException`, and `ConstraintViolationException` to `400`.
 `spring-boot-starter-validation` stays on the classpath through the web starter.
+Oversized input now fails before the database can return a `500`.
 
 ### API-3 — `PUT` required the body UUID to match the path
 
@@ -109,38 +112,35 @@ key needs a migration plan.
 
 ### DATA-1 — Cascade delete breaks when ingredients are shared
 
-**Evidence:** `Recipe.ingredients` is `@ManyToMany(cascade = CascadeType.ALL)`.
-`CascadeType.ALL` includes `REMOVE`. Deleting a recipe cascades to every ingredient in
+**Evidence:** `Recipe.ingredients` used `@ManyToMany(cascade = CascadeType.ALL)`.
+`CascadeType.ALL` includes `REMOVE`, so deleting a recipe cascaded to every ingredient in
 its set.
 
-**Verified behavior (H2 smoke test):**
+**Verified behavior before the fix (H2 smoke test):**
 
-- Unshared ingredients are deleted together with the recipe.
-- If an ingredient is referenced by another recipe, Hibernate deletes the recipe's join
-  rows, then tries to delete the ingredient. The foreign key from `recipe_ingredients`
-  rejects the delete, the request returns `500` with a constraint-violation message, and
-  the transaction rolls back. The recipe remains.
-- Deleting a recipe with an empty ingredient set succeeds.
+- Unshared ingredients were deleted together with the recipe.
+- If an ingredient was referenced by another recipe, Hibernate deleted the recipe's join
+  rows, then tried to delete the ingredient. The foreign key from `recipe_ingredients`
+  rejected the delete, the request returned `500` with a constraint-violation message, and
+  the transaction rolled back. The recipe remained.
 
-**Impact:** recipes that share ingredients cannot be deleted at all, and the failure is
-a 500 rather than a useful conflict response.
-
-**Fix:** reduce the cascade to `PERSIST` and `MERGE`, or remove the cascade and persist
-new ingredients explicitly in the service. Decide who owns an ingredient and add a
-cleanup strategy for orphan rows. Consider returning `409 Conflict` when an ingredient
-is still referenced, or removing only the join rows. This is a data-model change and
-needs a migration plan.
+**Fix applied:** the cascade is now `PERSIST`/`MERGE` only. `RecipeService.deleteRecipe`
+runs in a transaction, deletes the recipe, flushes, and then deletes only ingredients
+that no remaining recipe references (`existsByIngredients_Uuid`). Shared ingredients are
+kept, the delete succeeds with `200 OK` and `"OK"`, and integration tests cover both the
+shared and unshared cases. The explicit cleanup is the trade-off; there is no database
+cascade.
 
 ### DEV-1 — No tests
 
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 24 tests covering the two mappers, `RecipeRepository`, and the
-full HTTP API. They run on H2 in PostgreSQL mode via the `test` profile and never touch
-a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
+**Fix applied:** added 31 tests covering the two mappers, the repositories, the
+exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
+`test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
-instead of rendering the error body.
+instead of rendering the error body. Testcontainers PostgreSQL remains future work.
 
 ### DEV-2 — No CI
 
@@ -177,15 +177,33 @@ is not a Spring Data repository and is never injected.
 on `Recipe`. If a separate step entity is introduced, model it explicitly and extend
 `JpaRepository<Step, UUID>`.
 
-### DATA-2 — Ingredient triple has no unique constraint
+### DATA-2 — Ingredient triple had no unique constraint
 
-**Evidence:** `findByNameIngredientAndAmountAndMeasurement` assumes uniqueness, but
-there is no `@Table(uniqueConstraints = ...)` or database constraint. Duplicate rows
-cause `IncorrectResultSizeDataAccessException`.
+**Evidence:** `findByNameIngredientAndAmountAndMeasurement` assumes uniqueness, but there
+was no `@Table(uniqueConstraints = ...)` or database constraint. Duplicate rows caused
+`IncorrectResultSizeDataAccessException`.
 
-**Fix:** add a unique constraint on `(name_ingredient, amount, measurement)`, deduplicate
-existing rows in a migration, and handle the constraint violation. Consider normalizing
-ingredient names and units instead of using free text.
+**Fix applied:** `uk_ingredient_identity` on `(name_ingredient, amount, measurement)`.
+Existing duplicates must be deduplicated before the constraint is applied. The entity now
+maps `nameIngredient` to the explicit `name_ingredient` column. A regression test asserts
+that a duplicate triple violates the constraint. Normalizing ingredient names and units
+instead of using free text remains future work.
+
+### DATA-4 — Recipe updates can orphan previously referenced ingredients
+
+**Evidence:** `RecipeService.deleteRecipe` deletes ingredients that no recipe references,
+but `upsertRecipe` and `updateRecipe` replace `Recipe.ingredients` and never clean up
+ingredients that the previous version referenced and nothing else does. Repeated updates
+can leave unreachable ingredient rows.
+
+**Impact:** storage growth and misleading counts in any future ingredient endpoint. Reads
+are unaffected because they start from recipes.
+
+**Fix:** after an update that replaces the ingredient set, compute the removed ingredients
+and delete those no recipe still references, using the same
+`existsByIngredients_Uuid` check as deletion. Cover it with an integration test. This is
+the same ownership question as `DATA-1`; decide who owns an ingredient before changing
+the model.
 
 ### DATA-3 — `ddl-auto: update` is the only schema management
 
@@ -227,14 +245,16 @@ rate limiting at the gateway or with a filter.
 **Fix:** accept `page` and `size` (or cursor parameters), return a page envelope, and
 document the change. This is a response-shape change; coordinate it with clients.
 
-### API-6 — `POST /recipe/bulk` is not transactional
+### API-6 — `POST /recipe/bulk` was not transactional
 
-**Evidence:** the controller loops over `createRecipe` with no transaction. A failure
-halfway leaves earlier items saved.
+**Evidence:** the controller looped over the create logic with no transaction. A failure
+halfway left earlier items saved.
 
-**Fix:** move the loop into a service method annotated `@Transactional` and return a
-result that identifies failures, or fail the whole batch. Document the all-or-nothing
-semantics.
+**Fix applied:** `RecipeService.upsertRecipes` is `@Transactional`, so the whole batch
+succeeds or fails together. Validation still runs before the service call, so an invalid
+item returns `400` and writes nothing. Integration tests cover both the invalid-item path
+and the all-or-nothing contract. Returning per-item results remains a possible future
+change.
 
 ### CFG-1 — Hibernate dialect is misspelled and misplaced
 
@@ -261,17 +281,15 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 ```
 
-### DEV-5 — Mapper is constructed manually in the controller
+### DEV-5 — Mapper was constructed manually in the controller
 
-**Evidence:** `RecipeController` does `this.recipeMapper = new RecipeMapper(...)`, while
-`RecipeMapper` also has an `@Autowired` field that is ignored because the mapper is not
+**Evidence:** `RecipeController` did `this.recipeMapper = new RecipeMapper(...)`, while
+`RecipeMapper` also had an `@Autowired` field that was ignored because the mapper was not
 a Spring bean.
 
-**Consequences:** the mapper cannot be replaced or mocked cleanly, and slice tests need
-to work around it.
-
-**Fix:** annotate `RecipeMapper` with `@Component`, inject it through the constructor,
-and remove the `@Autowired` field. Do this together with tests.
+**Fix applied:** `RecipeMapper` is a `@Component`; the controller and service receive it
+through constructor injection, and the ignored `@Autowired` field was removed.
+`IngredientMapper` is still instantiated directly.
 
 ## P3 — cleanup
 
@@ -293,13 +311,14 @@ an encryption library is added later.
 **Fix applied:** regenerated the script-only wrapper with Maven Wrapper 3.3.4 and Maven
 3.9.16. `./mvnw -v` and `./mvnw -B -DskipTests package` now work.
 
-### DEV-6 — `@Autowired` on final fields is redundant
+### DEV-6 — `@Autowired` on final fields was redundant
 
-**Evidence:** `RecipeController` annotates final fields that are assigned in the
+**Evidence:** `RecipeController` annotated final fields that are assigned in the
 constructor. Constructor injection already satisfies the dependency.
 
-**Fix:** remove the annotations when touching the class. Do not perform a broad
-formatting-only change.
+**Fix applied:** the redundant annotations were removed. The ignored `@Autowired` field
+in `RecipeMapper` remains part of DEV-5, because the mapper is still constructed
+manually.
 
 ### REPO-1 — `mediterraneapp.iml` was tracked
 
@@ -330,7 +349,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 24 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 31 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -339,7 +358,8 @@ coordinates and any dependency references.
 - Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
   low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
-  upsert, bulk, validation, missing row returning 404, invalid UUID returning 400, PUT
-  with matching/omitted/mismatched UUID, delete, shared-ingredient delete). The same
-  behavior is expected on PostgreSQL, but it was not exercised against a live PostgreSQL
-  server.
+  upsert, bulk including rollback, validation, missing row returning 404, invalid UUID
+  returning 400, PUT with matching/omitted/mismatched UUID, delete with 404 and orphan
+  cleanup, shared-ingredient delete, and unique-constraint conflicts returning 409). The
+  same behavior is expected on PostgreSQL, but it was not exercised against a live
+  PostgreSQL server.
