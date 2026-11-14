@@ -37,7 +37,8 @@
 - `GET /recipe` -> all recipes.
 - `GET /recipe/{uuid}` -> one recipe; 404 if absent, 400 for an invalid UUID.
 - `POST /recipe` -> create or update by `name`; 201 on create, 200 on update, 409 on a
-  unique-name conflict.
+  unique-name conflict. Replacing `ingredients` deletes dropped ingredients that no
+  recipe references.
 - `POST /recipe/bulk` -> batch create/update in one transaction, HTTP 200 body
   `"CREATED"`.
 - `PUT /recipe/{uuid}` -> update; the path UUID is authoritative, an optional body UUID

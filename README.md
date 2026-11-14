@@ -79,8 +79,8 @@ Tests:
 The suite runs on an in-memory H2 database in PostgreSQL mode, so it needs no
 PostgreSQL server and never touches a remote database. It covers the mappers, the
 repositories (including the unique constraints), and the full HTTP API, including the
-`400`/`404`/`409` error mappings, bulk rollback, and delete cleanup for shared and
-unshared ingredients. CI runs `./mvnw -B verify` on every push and pull request to
+`400`/`404`/`409` error mappings, bulk rollback, and ingredient cleanup on delete and
+update for shared and unshared ingredients. CI runs `./mvnw -B verify` on every push and pull request to
 `main`.
 
 ## Configuration

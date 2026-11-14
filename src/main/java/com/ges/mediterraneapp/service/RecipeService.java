@@ -65,7 +65,7 @@ public class RecipeService {
             throw new IllegalArgumentException("Body uuid must match the path uuid");
         }
 
-        return recipeRepository.save(recipeMapper.updateModel(recipeDto, recipe));
+        return applyUpdate(recipe, recipeDto);
     }
 
     @Transactional
@@ -78,10 +78,7 @@ public class RecipeService {
         recipeRepository.delete(recipe);
         recipeRepository.flush();
 
-        ingredients.stream()
-                .filter(ingredient -> ingredient.getUuid() != null)
-                .filter(ingredient -> !recipeRepository.existsByIngredients_Uuid(ingredient.getUuid()))
-                .forEach(ingredientRepository::delete);
+        deleteUnreferencedIngredients(ingredients, Set.of());
     }
 
     private UpsertResult doUpsert (RecipeDto recipeDto) {
@@ -93,8 +90,39 @@ public class RecipeService {
             recipe.setUuid(UUID.fromString(recipeDto.getUuid()));
         }
 
+        return new UpsertResult(applyUpdate(recipe, recipeDto), created);
+    }
+
+    /**
+     * Saves the mapped entity and removes ingredients that the previous version
+     * referenced and that no recipe references any more. Ingredients are only removed
+     * when the request supplies an ingredient set; an omitted field keeps the old one.
+     */
+    private Recipe applyUpdate (Recipe recipe, RecipeDto recipeDto) {
+        Set<Ingredient> previous = recipe.getIngredients() == null
+                ? Set.of()
+                : new HashSet<>(recipe.getIngredients());
+
         Recipe saved = recipeRepository.save(recipeMapper.updateModel(recipeDto, recipe));
-        return new UpsertResult(saved, created);
+
+        if (recipeDto.getIngredients() != null && !previous.isEmpty()) {
+            recipeRepository.flush();
+            Set<Ingredient> current = saved.getIngredients() == null
+                    ? Set.of()
+                    : saved.getIngredients();
+            deleteUnreferencedIngredients(previous, current);
+        }
+
+        return saved;
+    }
+
+    private void deleteUnreferencedIngredients (Set<Ingredient> candidates, Set<Ingredient> current) {
+        candidates.stream()
+                .filter(ingredient -> ingredient.getUuid() != null)
+                .filter(ingredient -> current.stream()
+                        .noneMatch(currentIngredient -> ingredient.getUuid().equals(currentIngredient.getUuid())))
+                .filter(ingredient -> !recipeRepository.existsByIngredients_Uuid(ingredient.getUuid()))
+                .forEach(ingredientRepository::delete);
     }
 
     public record UpsertResult(Recipe recipe, boolean created) {
