@@ -6,9 +6,9 @@ A small REST API for recipes, built with Spring Boot. It stores recipes, their
 ingredients, and their preparation steps in PostgreSQL.
 
 > **Status:** legacy portfolio project from 2020. The code builds and has an automated
-> test suite plus CI, but no authentication, and the database is configured only through
-> environment variables. Read [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) before
-> deploying or extending it.
+> test suite plus CI. The recipe API is protected by a shared API key, and the database is
+> configured only through environment variables. Read
+> [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) before deploying or extending it.
 
 ## Stack
 
@@ -40,6 +40,16 @@ Operational endpoints: `GET /actuator/health` (status only) and `GET /actuator/i
 CORS is disabled by default; set `APP_CORS_ALLOWED_ORIGINS` to a comma-separated list of
 origins to enable it for `/recipe/**`.
 
+Every recipe endpoint except `GET /recipe/status` requires the shared key from
+`APP_API_KEY`:
+
+```bash
+curl -s -H "X-API-Key: $APP_API_KEY" http://localhost:8080/recipe
+```
+
+A missing or wrong key returns `401 Unauthorized`. Actuator, `/recipe/status`, and CORS
+preflight stay open.
+
 Example:
 
 ```bash
@@ -60,6 +70,7 @@ docker run --rm --name mediterraneapp-db \
 export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
 export SPRING_DATASOURCE_USERNAME='mediterraneapp'
 export SPRING_DATASOURCE_PASSWORD='change-me'
+export APP_API_KEY='change-me-to-a-long-random-value'
 
 ./mvnw -B clean package
 ./mvnw spring-boot:run
@@ -98,6 +109,7 @@ Spring Boot relaxed binding reads the datasource from the environment:
 | `SPRING_DATASOURCE_USERNAME` | Database user |
 | `SPRING_DATASOURCE_PASSWORD` | Database password |
 | `SERVER_PORT` | HTTP port, default `8080` |
+| `APP_API_KEY` | Required shared API key for `/recipe/**`; startup fails when blank |
 | `APP_CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins; empty disables CORS |
 
 See [`.env.example`](.env.example). Spring Boot does not load `.env` automatically;
@@ -114,6 +126,7 @@ docker run --rm -p 8080:8080 \
   -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/mediterraneapp' \
   -e SPRING_DATASOURCE_USERNAME='mediterraneapp' \
   -e SPRING_DATASOURCE_PASSWORD='change-me' \
+  -e APP_API_KEY='change-me-to-a-long-random-value' \
   mediterraneapp
 ```
 

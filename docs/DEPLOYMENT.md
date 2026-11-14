@@ -23,12 +23,13 @@ datasource through the environment; the paths below are templates.
      -p 5432:5432 -d postgres:16
    ```
 
-2. Export the datasource overrides:
+2. Export the configuration overrides:
 
    ```bash
    export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
    export SPRING_DATASOURCE_USERNAME='mediterraneapp'
    export SPRING_DATASOURCE_PASSWORD='change-me'
+   export APP_API_KEY='change-me-to-a-long-random-value'
    ```
 
 3. Build and run:
@@ -43,8 +44,11 @@ datasource through the environment; the paths below are templates.
    ```bash
    curl -i http://localhost:8080/recipe/status
    # 200, body: "I_AM_A_TEAPOT"
-   curl -i 'http://localhost:8080/recipe?page=0&size=20'
+   curl -i 'http://localhost:8080/recipe?page=0&size=20' \
+     -H "X-API-Key: $APP_API_KEY"
    # 200, body: {"content":[],"page":0,"size":20,"totalElements":0,"totalPages":0}
+   curl -i 'http://localhost:8080/recipe?page=0&size=20'
+   # 401 without the header
    ```
 
 On the first startup Flyway applies `db/migration/V1__baseline.sql`, then Hibernate
@@ -72,6 +76,7 @@ to Docker with `--env-file`. Never commit a filled `.env`.
 | `SPRING_DATASOURCE_USERNAME` | none | Yes |
 | `SPRING_DATASOURCE_PASSWORD` | none | Yes |
 | `SERVER_PORT` | `8080` | No |
+| `APP_API_KEY` | none | Yes; startup fails when blank |
 | `APP_CORS_ALLOWED_ORIGINS` | empty (CORS disabled) | No |
 | `JAVA_OPTS` | none | No, used by the Docker `CMD` |
 
@@ -94,6 +99,11 @@ Other current settings:
   liveness/readiness groups.
 - CORS is disabled unless `APP_CORS_ALLOWED_ORIGINS` lists one or more exact origins.
   There is no wildcard default.
+- `APP_API_KEY` is required. `/recipe/**` calls need the `X-API-Key` header, except
+  `GET /recipe/status`; `/actuator/**` and CORS preflight are open. Use a long random
+  value from the platform secret store. All clients share it, so rotate it by restarting
+  with a new value and updating every client. Terminate TLS in front of the API: the key
+  is sent on every request.
 
 ## Docker
 
@@ -103,6 +113,7 @@ docker run --rm -p 8080:8080 \
   -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/mediterraneapp' \
   -e SPRING_DATASOURCE_USERNAME='mediterraneapp' \
   -e SPRING_DATASOURCE_PASSWORD='change-me' \
+  -e APP_API_KEY='change-me-to-a-long-random-value' \
   mediterraneapp
 ```
 
@@ -162,7 +173,9 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
 - [x] Use Flyway with `spring.jpa.hibernate.ddl-auto=validate`; add a new versioned
   migration for every schema change.
 - [ ] Disable `show-sql` or route it to a controlled logger.
-- [ ] Add authentication and TLS termination in front of the API.
+- [x] Require an API key (`APP_API_KEY`) on the recipe API.
+- [ ] Add TLS termination in front of the API; the key travels on every request.
+- [ ] Add rate limiting at the gateway or proxy (`OPS-5`).
 - [ ] Add a health endpoint that checks the database if the platform needs one.
 - [ ] Pin and update base images.
 - [ ] Add a CI pipeline that builds and tests every change.
@@ -178,3 +191,5 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
 | Tables are missing | Migrations did not run, or the database user cannot create tables | Grant schema privileges and check the Flyway log |
 | `IncorrectResultSizeDataAccessException` | Duplicate ingredient triples | Deduplicate ingredients and add a unique constraint |
 | Build fails on JDK 24 or older | Boot 4 and the POM require Java 25 | Build with JDK 25 |
+| Startup fails with `app.api-key is not set` | `APP_API_KEY` is blank or missing | Set `APP_API_KEY` to a long random value |
+| `401 Unauthorized` on `/recipe` | Missing or wrong `X-API-Key` | Send the value of `APP_API_KEY` (not the variable name) |

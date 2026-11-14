@@ -31,8 +31,9 @@ Severity:
 | DATA-3 | P2 | `ddl-auto: update` was the only schema management | **Fixed** |
 | DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | **Fixed** |
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | **Fixed** |
-| OPS-3 | P2 | No authentication or rate limiting | Open |
+| OPS-3 | P2 | No authentication | **Fixed** |
 | OPS-4 | P2 | No CORS or actuator surface | **Fixed** |
+| OPS-5 | P2 | No request rate limiting | Open |
 | API-5 | P2 | No pagination on `GET /recipe` | **Fixed** |
 | API-6 | P2 | `POST /recipe/bulk` was not transactional | **Fixed** |
 | API-7 | P2 | Client-supplied UUID on create returned 500 | **Fixed** |
@@ -138,7 +139,7 @@ cascade.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 42 tests covering the two mappers, the repositories, the
+**Fix applied:** added 54 tests covering the two mappers, the repositories, the
 exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
 `test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
@@ -238,17 +239,32 @@ port 8080, and adds a `HEALTHCHECK` against `/recipe/status`. The `.dockerignore
 `target/` and IDE state out of the build context. The build was not exercised locally
 because Docker is unavailable in this environment; CI validates the Maven build only.
 
-### OPS-3 — No authentication or rate limiting
+### OPS-3 — No authentication
 
-**Evidence:** no security starter and no rate-limiting filter or gateway configuration.
-The API is reachable by anyone who can reach the port.
+**Evidence:** there was no security starter, filter, or gateway authentication. The API
+was reachable by anyone who could reach the port.
 
-**Risk:** anyone who can reach the port can read and mutate all data, and can exhaust
-resources with repeated requests.
+**Fix applied:** `ApiKeyFilter` requires a shared key in the `X-API-Key` header on
+`/recipe/**`, except `GET /recipe/status` (used by the Docker `HEALTHCHECK`). Actuator
+endpoints and CORS preflight remain open. The key comes from `APP_API_KEY`
+(`app.api-key`); a blank value aborts startup, and comparison is constant-time.
+Integration tests cover missing/wrong/valid keys and the open endpoints.
 
-**Fix:** add authentication before exposing the API publicly, then add rate limiting at
-the gateway or with a filter. The mechanism (API key, OAuth2 resource server, session) is
-a product decision; document the chosen scheme here and in the API reference.
+**Remaining limitations:** all clients share one key, there is no identity or
+authorization, and rotation requires a restart. Send the key over TLS only.
+
+### OPS-5 — No request rate limiting
+
+**Evidence:** there is no rate-limiting filter, bucket configuration, or documented
+gateway policy.
+
+**Risk:** an unauthenticated attacker can still reach the open endpoints, and any client
+with the key can exhaust database connections or CPU with repeated requests.
+
+**Fix:** apply rate limiting at the reverse proxy or API gateway (per key and per IP),
+which handles distributed instances; if it must live in the application, add a filter
+with a bounded, shared store rather than a per-instance in-memory counter. Document the
+chosen limits in the API reference.
 
 ### OPS-4 — No CORS or actuator surface
 
@@ -383,7 +399,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 42 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 54 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -391,6 +407,11 @@ coordinates and any dependency references.
   `SPRING_DATASOURCE_*` at runtime.
 - Actuator exposes only `health` and `info`, with health details hidden. CORS is opt-in
   through `APP_CORS_ALLOWED_ORIGINS` and adds no mapping when the list is empty.
+- `ApiKeyFilter` requires `X-API-Key` on `/recipe/**` except `GET /recipe/status`.
+  `/actuator/**` and `OPTIONS` are open. A blank `APP_API_KEY` prevents startup.
+  Integration tests cover missing, wrong, and valid keys plus the open endpoints.
+- The test profile sets `app.api-key: test-api-key`; `RecipeApiIntegrationTest` attaches
+  the header through a `RestTemplateCustomizer`. The key is a test value, not a secret.
 - Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
   low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,

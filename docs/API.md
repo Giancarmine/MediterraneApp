@@ -1,11 +1,12 @@
 # API reference
 
 MediterraneApp exposes a small JSON API for recipes under `/recipe`. There is no
-authentication, versioning, or ingredient endpoint.
+versioning or ingredient endpoint.
 
 - **Base URL (local):** `http://localhost:8080`
 - **Content type:** `application/json`
-- **Authentication:** none
+- **Authentication:** required on `/recipe/**` except `GET /recipe/status`. Send the
+  shared key in the `X-API-Key` header. Actuator endpoints are open.
 - **Error format:** JSON with `timestamp`, `status`, `error`, `message`, and `path`.
   Handled exceptions use this shape; unhandled exceptions use Spring Boot's default
   error body, which has the same top-level keys.
@@ -264,6 +265,25 @@ There is no `IngredientController`. `IngredientService` and
 `IngredientRepository` exist, but ingredients can only be created or referenced through
 a recipe payload. Adding a public ingredient API is an additive change, not a refactor.
 
+## Authentication
+
+Every `/recipe/**` endpoint except `GET /recipe/status` requires a shared key in the
+`X-API-Key` header:
+
+```bash
+curl -s -H "X-API-Key: $APP_API_KEY" http://localhost:8080/recipe
+```
+
+- A missing or wrong key returns `401 Unauthorized` with the standard error body and the
+  message `Missing or invalid API key`.
+- The key is configured with `APP_API_KEY` (`app.api-key`). Startup fails when it is
+  blank, so the API cannot be deployed unprotected by accident.
+- `GET /recipe/status`, `/actuator/**`, and CORS preflight (`OPTIONS`) requests are open,
+  so health probes and browser preflight keep working. All other methods and paths under
+  `/recipe` require the key.
+- All clients share one key; there is no per-user identity or authorization. Rotating the
+  key requires restarting the application. Send it over TLS only.
+
 ## Operational endpoints
 
 Actuator is on the classpath with a deliberately narrow exposure set:
@@ -288,6 +308,11 @@ default, and an unlisted origin fails preflight with `403 Forbidden`.
 - `MethodArgumentNotValidException`, `HandlerMethodValidationException`, and
   `ConstraintViolationException` → `400 Bad Request`
 - `DataIntegrityViolationException` → `409 Conflict` with a generic message
+
+`ApiKeyFilter` rejects requests with a missing or wrong API key with `401 Unauthorized`
+before the controller runs. That response comes from the servlet error dispatch, so it
+uses Spring Boot's default body (same top-level keys) and the message
+`Missing or invalid API key`.
 
 A missing recipe produces:
 
@@ -322,6 +347,8 @@ is a concern.
 ## Compatibility rules for agents
 
 - Keep existing paths and JSON field names unless the owner approves a breaking change.
+- Every `/recipe/**` call except `/recipe/status` needs `X-API-Key`. Do not add endpoints
+  under `/recipe` that bypass the filter without documenting the exemption.
 - Add new fields as optional and non-null-safe on read.
 - `GET /recipe` returns a page envelope (`content`, `page`, `size`, `totalElements`,
   `totalPages`), not a bare array. Keep the field names and the `1..100` size bound in

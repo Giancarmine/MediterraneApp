@@ -76,8 +76,17 @@ src/main/java/com/ges/mediterraneapp/
 | `RecipeDto` / `IngredientDto` | JSON contract | `@JsonInclude(NON_NULL)`, string UUIDs. |
 | `JacksonConfig` | JSON customization | Registers an `HttpStatus` serializer that writes `name()`, preserving the historical bodies. |
 | `CorsConfig` | Opt-in CORS | Adds `/recipe/**` mappings only when `app.cors.allowed-origins` is non-empty. |
+| `ApiKeyFilter` | Authentication | Requires `X-API-Key` on `/recipe/**`, except `GET /recipe/status`, actuator, and `OPTIONS`; fails startup when `app.api-key` is blank. |
 
 ## Request flows
+
+### Authentication
+
+`ApiKeyFilter` is a servlet filter that runs before Spring MVC. It compares the
+`X-API-Key` header with `app.api-key` in constant time (`MessageDigest.isEqual`) and
+sends `401 Unauthorized` on a missing or wrong value. It skips `OPTIONS` preflight
+requests, `/actuator/**`, and `GET /recipe/status`. A blank `app.api-key` aborts startup.
+The request is not dispatched to the controller unless the key matches.
 
 ### Read one recipe
 
@@ -208,6 +217,7 @@ Details:
 - Flyway is enabled with `baseline-on-migrate: true` and `baseline-version: 1`;
 - `management.endpoints.web.exposure.include: health,info`, with
   `management.endpoint.health.show-details: never`;
+- `app.api-key`, bound from `APP_API_KEY`; a blank value fails startup;
 - `app.cors.allowed-origins`, bound from `APP_CORS_ALLOWED_ORIGINS` and empty by default.
 
 `CorsConfig` reads the origin list, trims it, drops blanks, and registers no mapping when
@@ -218,10 +228,10 @@ There is no configuration-encryption layer. Jasypt was removed because no `ENC(.
 values are configured and the datasource is supplied through the environment.
 
 At startup Spring Boot creates the datasource from `SPRING_DATASOURCE_*`, Flyway applies
-any pending migrations, Hibernate validates the resulting schema, and Tomcat binds port
-8080. If the datasource variables are missing, the database is unreachable, a migration
-fails, or the entity model does not match the schema, startup fails; there is no graceful
-degradation.
+any pending migrations, Hibernate validates the resulting schema, `ApiKeyFilter` checks
+that a key is configured, and Tomcat binds port 8080. If the datasource variables are
+missing, the database is unreachable, a migration fails, the entity model does not match
+the schema, or `APP_API_KEY` is blank, startup fails; there is no graceful degradation.
 
 ## Design decisions and their trade-offs
 
@@ -237,6 +247,8 @@ degradation.
 | Mapper as a Spring bean | Constructor injection and testability; mapper and service form the only cyclic-free collaboration. |
 | Global exception handler | `ApiExceptionHandler` maps handled exceptions to `400`/`404`/`409`; unexpected failures still surface as `500`. |
 | Paginated list with a fixed envelope | Bounds the response size and keeps the JSON shape stable; changes `GET /recipe` from an array to `PageResponse`. |
+| Shared API key in a header | One credential protects the whole API without a user directory; no identity, authorization, or per-client revocation, and rotation needs a restart. |
+| Servlet filter instead of Spring Security | Small dependency footprint and no filter-chain configuration; authentication is a single comparison, not a policy engine. |
 
 ## Extension points
 
@@ -252,5 +264,7 @@ Changes that need an explicit decision:
 - Changing the upsert key from `name` to `uuid`.
 - Changing the ingredient ownership or normalization strategy (for example, introducing
   a canonical ingredient table instead of the free-text triple).
-- Adding authentication or a browser frontend.
+- Adding request-rate limiting, or replacing the shared API key with per-client keys or
+  OAuth2.
+- Adding a browser frontend.
 - Moving to a multi-module build.
