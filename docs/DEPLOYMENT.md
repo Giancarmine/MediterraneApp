@@ -80,8 +80,8 @@ Other current settings:
 - `spring.jpa.hibernate.ddl-auto=update`.
 - Unique constraints: `uk_recipe_name` and `uk_ingredient_identity`. Deduplicate existing
   data before deploying this version.
-- Hibernate dialect is misspelled and nested under the wrong key; Hibernate
-  auto-detects the dialect, so this is harmless today. Fix it in a dedicated change.
+- Hibernate auto-detects the dialect from the JDBC connection. There is no explicit
+  dialect property.
 
 ## Docker
 
@@ -99,17 +99,17 @@ or a Docker network that contains both containers.
 
 The Dockerfile is a two-stage build:
 
-1. `maven:3.9-eclipse-temurin-25` runs `mvn clean install` inside the image.
-2. `eclipse-temurin:25-jre` copies the fat JAR and runs it with `JAVA_OPTS`.
+1. `maven:3.9-eclipse-temurin-25` runs the committed wrapper
+   (`./mvnw -B -ntp -DskipTests package`).
+2. `eclipse-temurin:25-jre` copies the exact
+   `target/mediterraneapp-0.0.1-SNAPSHOT.jar`, installs `curl`, runs the app as the
+   non-root `app` user, and checks `/recipe/status` with a `HEALTHCHECK`.
 
-Known weaknesses (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
+Known limitations (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
 
 - The images are current Temurin 25 tags, but they are not pinned to a digest.
-- `COPY --from=build "MediterraneApp/target/*.jar" app.jar` wraps the wildcard in
-  quotes. Docker does not expand a glob inside quotes; verify the copy or use the exact
-  JAR name.
-- There is no `HEALTHCHECK`, no non-root user, and no `.dockerignore` in the original
-  repository (one is now provided).
+- The build was not exercised locally because Docker is unavailable; validate the image
+  in a Docker-capable environment before deploying.
 
 ## Heroku (legacy)
 

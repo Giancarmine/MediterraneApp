@@ -72,6 +72,23 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
+    void createRecipeIgnoresClientSuppliedUuid() {
+        String suppliedUuid = UUID.randomUUID().toString();
+        String name = unique("AssignedUuid");
+
+        ResponseEntity<String> response = postJson("/recipe", """
+                {"uuid":"%s","name":"%s","ingredients":[]}
+                """.formatted(suppliedUuid, name));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertJson(response);
+        String generatedUuid = JsonPath.read(response.getBody(), "$.uuid");
+        assertThat(generatedUuid).isNotEqualTo(suppliedUuid);
+        assertThat(recipeRepository.findByUuid(UUID.fromString(generatedUuid))).isPresent();
+        assertThat(recipeRepository.findByUuid(UUID.fromString(suppliedUuid))).isEmpty();
+    }
+
+    @Test
     void listRecipesContainsCreatedRecipe() {
         String uuid = createRecipe(unique("Paella"), unique("Rice"));
 
