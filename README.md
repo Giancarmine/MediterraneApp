@@ -65,8 +65,8 @@ export SPRING_DATASOURCE_PASSWORD='change-me'
 ./mvnw spring-boot:run
 ```
 
-The API starts on <http://localhost:8080>. Hibernate creates the schema on first run
-because `spring.jpa.hibernate.ddl-auto` is `update`.
+The API starts on <http://localhost:8080>. Flyway applies the baseline migration on first
+run, then Hibernate validates the schema with `spring.jpa.hibernate.ddl-auto=validate`.
 
 Build only:
 

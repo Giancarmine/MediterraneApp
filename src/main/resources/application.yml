@@ -9,11 +9,18 @@ spring:
     ## SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, and
     ## SPRING_DATASOURCE_PASSWORD (or a local, untracked profile).
 
-  # Hibernate ddl auto (create, create-drop, validate, update)
+  # Hibernate validates the schema; Flyway owns the migrations.
   jpa:
     show-sql: true
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
+
+  # Baseline existing Hibernate-managed databases at V1 without re-running the
+  # baseline script. Fresh databases run V1 normally.
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
 
   # Keep the historical error payload (Boot 2.2 included the exception message).
   # Boot 4 moved the MVC error attributes under spring.web.error.

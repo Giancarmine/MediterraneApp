@@ -12,7 +12,7 @@ changing code.
 | Language | Java 25 (LTS) |
 | Framework | Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7.4) |
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
-| Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
+| Database | PostgreSQL; schema managed by Flyway, validated by Hibernate |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
 | Size | 16 main Java files, about 650 lines, 38 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
@@ -46,7 +46,7 @@ consumed.
   datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
   application will not start without it.
 - GitHub Actions runs `./mvnw -B verify` on every push and pull request to `main`.
-  There is no migration tool, authentication, OpenAPI document, or API versioning.
+  There is no authentication, OpenAPI document, or API versioning.
   Actuator exposes only `health` and `info`, and CORS is opt-in through
   `APP_CORS_ALLOWED_ORIGINS`.
 
@@ -165,8 +165,12 @@ binding means environment variables override it:
 
 - `.env.example` lists the variable names. Spring Boot does **not** read `.env`
   automatically; export the variables, use `direnv`, or pass `--env-file` to Docker.
-- `spring.jpa.hibernate.ddl-auto` is `update`. Hibernate creates and alters tables from
-  the entities. There is no Flyway or Liquibase.
+- `spring.jpa.hibernate.ddl-auto` is `validate`. Flyway applies versioned migrations from
+  `src/main/resources/db/migration` before Hibernate starts. `V1__baseline.sql` is the
+  current schema; add `V2__*.sql` for later changes and never edit an applied file.
+  Existing `ddl-auto: update` databases are baselined at V1 and must already match it.
+- `spring.flyway.baseline-on-migrate` is `true` with `baseline-version: 1`, so a non-empty
+  legacy schema is not recreated.
 - `spring.jpa.show-sql` is `true`, so SQL is printed to the console.
 - Actuator is on the classpath and exposes only `/actuator/health` and `/actuator/info`;
   health details are hidden. Do not broaden the exposure set casually.
@@ -398,10 +402,9 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. `ddl-auto: update` is the only schema management; no Flyway or Liquibase.
-3. `GET /recipe` has no pagination.
-4. No authentication or rate limiting.
-5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
+2. `GET /recipe` has no pagination.
+3. No authentication or rate limiting.
+4. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 
 ## Change workflow
@@ -431,7 +434,6 @@ Use a branch and pull request for non-trivial work. Do not commit generated arti
 ## Out of scope unless explicitly requested
 
 - Upgrading to Spring Boot 3 / Jakarta EE.
-- Replacing Hibernate `ddl-auto` with Flyway or Liquibase.
 - Adding authentication, a frontend, or API versioning.
 - Rewriting the mappers with MapStruct.
 - Changing the license.
