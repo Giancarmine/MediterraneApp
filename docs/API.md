@@ -80,27 +80,43 @@ Jackson 3 would otherwise use `toString()` and produce `"418 I_AM_A_TEAPOT"`.
 
 ### `GET /recipe`
 
-Returns every recipe in the database. No pagination or filtering.
+Returns one page of recipes, sorted by `name`.
+
+| Query parameter | Default | Rules |
+| --- | --- | --- |
+| `page` | `0` | Zero-based page index; must be `>= 0`. |
+| `size` | `20` | Page size; must be between `1` and `100`. |
 
 ```bash
-curl -s http://localhost:8080/recipe
+curl -s 'http://localhost:8080/recipe?page=0&size=20'
 ```
 
 ```json
-[
-  {
-    "uuid": "3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81",
-    "name": "Tortilla de patatas",
-    "preparedTime": "15m",
-    "cookedTime": "30m",
-    "totalTime": "45m",
-    "steps": ["Peel and slice the potatoes."],
-    "ingredients": []
-  }
-]
+{
+  "content": [
+    {
+      "uuid": "3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81",
+      "name": "Tortilla de patatas",
+      "preparedTime": "15m",
+      "cookedTime": "30m",
+      "totalTime": "45m",
+      "steps": ["Peel and slice the potatoes."],
+      "ingredients": []
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
 ```
 
-Returns `200 OK` with `[]` when the table is empty.
+Returns `200 OK` with an empty `content` array and `totalElements: 0` when the table is
+empty. A negative `page`, a `size` outside `1..100`, or a non-numeric value returns
+`400 Bad Request`.
+
+This endpoint used to return a bare JSON array. The page envelope is the current
+contract; clients that expected an array must read `content`.
 
 ### `GET /recipe/{uuid}`
 
@@ -307,6 +323,9 @@ is a concern.
 
 - Keep existing paths and JSON field names unless the owner approves a breaking change.
 - Add new fields as optional and non-null-safe on read.
+- `GET /recipe` returns a page envelope (`content`, `page`, `size`, `totalElements`,
+  `totalPages`), not a bare array. Keep the field names and the `1..100` size bound in
+  sync with the code.
 - The upsert-by-name behavior of `POST /recipe` is deliberate; changing the key needs a
   migration plan. `POST` returns `200` for an update and `201` for a create.
 - `recipe.name` and the ingredient triple `(nameIngredient, amount, measurement)` are

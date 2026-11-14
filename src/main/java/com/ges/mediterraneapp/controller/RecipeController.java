@@ -1,15 +1,17 @@
 package com.ges.mediterraneapp.controller;
 
 import com.ges.mediterraneapp.mapper.RecipeMapper;
+import com.ges.mediterraneapp.model.dto.PageResponse;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
 import com.ges.mediterraneapp.service.RecipeService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/recipe")
@@ -28,10 +30,10 @@ public class RecipeController {
     }
 
     @GetMapping
-    public ResponseEntity<List<RecipeDto>> getAllRecipes () {
-        return new ResponseEntity<>(recipeService.getAllRecipe().stream()
-                .map(recipeMapper::toDto)
-                .collect(Collectors.toList()), HttpStatus.OK);
+    public ResponseEntity<PageResponse<RecipeDto>> getAllRecipes (
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return new ResponseEntity<>(recipeService.getRecipes(page, size), HttpStatus.OK);
     }
 
     @GetMapping("/{uuid}")

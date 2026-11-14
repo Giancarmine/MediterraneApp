@@ -64,7 +64,7 @@ src/main/java/com/ges/mediterraneapp/
 | Class | Responsibility | Notes |
 | --- | --- | --- |
 | `RecipeController` | HTTP routing, request validation, response status | Constructor-injected `RecipeService` and `RecipeMapper`. |
-| `RecipeService` | Find, create, update, delete recipes | `upsertRecipe`, `upsertRecipes`, `updateRecipe`, and `deleteRecipe` are `@Transactional`. Throws `NoSuchElementException` on missing rows; mapped to `404`. |
+| `RecipeService` | Find, create, update, delete recipes | `upsertRecipe`, `upsertRecipes`, `updateRecipe`, and `deleteRecipe` are `@Transactional`; `getRecipes` is a paginated `@Transactional(readOnly = true)` read. Throws `NoSuchElementException` on missing rows; mapped to `404`. |
 | `ApiExceptionHandler` | Maps handled exceptions to `400`/`404`/`409` JSON errors | One `@RestControllerAdvice`; keeps the default error field names. |
 | `IngredientService` | Find, create, update, delete ingredients | Not exposed through HTTP. |
 | `RecipeMapper` | Entity/DTO conversion and ingredient resolution | Spring `@Component`; calls `IngredientService` for each DTO ingredient. |
@@ -192,7 +192,9 @@ Details:
 - Unique constraints: `uk_recipe_name` on `recipe.name`, and `uk_ingredient_identity` on
   `(name_ingredient, amount, measurement)`. Existing duplicate rows must be cleaned up
   before V1 is applied to a database that does not already have the constraints.
-- There is no pagination or sorting; list endpoints use `findAll()`.
+- `GET /recipe` uses a `PageRequest` (`page`, `size`, sorted by `name`) and maps the
+  slice to DTOs inside a read-only transaction. `Recipe.steps` and
+  `Recipe.ingredients` use `@BatchSize` so a page does not issue a query per recipe.
 
 ## Configuration and startup
 
@@ -234,13 +236,14 @@ degradation.
 | No service interfaces | Less ceremony for a small app; harder to swap implementations. |
 | Mapper as a Spring bean | Constructor injection and testability; mapper and service form the only cyclic-free collaboration. |
 | Global exception handler | `ApiExceptionHandler` maps handled exceptions to `400`/`404`/`409`; unexpected failures still surface as `500`. |
+| Paginated list with a fixed envelope | Bounds the response size and keeps the JSON shape stable; changes `GET /recipe` from an array to `PageResponse`. |
 
 ## Extension points
 
 Safe, additive work:
 
 - Add `IngredientController` over the existing `IngredientService`.
-- Add pagination to `GET /recipe` (document the new parameters).
+- Add filtering or search parameters to `GET /recipe` (document the new parameters).
 - Broaden actuator exposure deliberately; keep `health`/`info` as the baseline.
 
 Changes that need an explicit decision:

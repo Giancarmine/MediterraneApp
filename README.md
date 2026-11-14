@@ -26,7 +26,7 @@ All endpoints live under `/recipe`.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/recipe/status` | Returns `"I_AM_A_TEAPOT"` as a JSON string. |
-| `GET` | `/recipe` | Lists recipes. |
+| `GET` | `/recipe` | Lists recipes, paginated (`page`, `size`). |
 | `GET` | `/recipe/{uuid}` | Reads one recipe. |
 | `POST` | `/recipe` | Creates a recipe, or updates one with the same name. |
 | `POST` | `/recipe/bulk` | Creates or updates a list of recipes. |

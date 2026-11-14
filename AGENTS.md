@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Flyway, validated by Hibernate |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 16 main Java files, about 650 lines, 38 tests |
+| Size | 16 main Java files, about 700 lines, 42 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -212,6 +212,7 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `model/dao/repository/RecipeRepository.java` | `findByUuid`, `findByName`, `existsByIngredients_Uuid`. |
 | `model/dao/repository/IngredientRepository.java` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement`. |
 | `model/dto/RecipeDto.java` | JSON shape for recipes; `NON_NULL` inclusion. |
+| `model/dto/PageResponse.java` | Stable page envelope for list responses. |
 | `model/dto/IngredientDto.java` | JSON shape for ingredients; `NON_NULL` inclusion. |
 | `config/JacksonConfig.java` | Preserves enum-name JSON for `HttpStatus` bodies. |
 | `config/CorsConfig.java` | Opt-in CORS for `/recipe/**` from configured origins. |
@@ -273,7 +274,8 @@ Important persistence facts:
   dropped by a replacement ingredient set, but only when the request supplies
   `ingredients`.
 - `steps` and the many-to-many join table are created by Hibernate with generated names.
-- There is no pagination; `GET /recipe` loads the whole table.
+- `GET /recipe` is paginated: `page` defaults to `0`, `size` to `20` (max `100`), and the
+  response is a `PageResponse` envelope sorted by `name`.
 
 ## API surface
 
@@ -283,7 +285,7 @@ All paths are under `/recipe`. Full payloads and status codes are in
 | Method | Path | Behavior |
 | --- | --- | --- |
 | `GET` | `/recipe/status` | Returns `"I_AM_A_TEAPOT"` as a JSON string with HTTP 200. |
-| `GET` | `/recipe` | Returns every recipe. |
+| `GET` | `/recipe` | Returns a page of recipes (`page`, `size`; envelope with `content`). |
 | `GET` | `/recipe/{uuid}` | Returns one recipe, or 404 when absent and 400 for an invalid UUID. |
 | `POST` | `/recipe` | Creates a recipe (201) or updates an existing one with the same `name` (200). |
 | `POST` | `/recipe/bulk` | Creates/updates each item, returns `"CREATED"` with HTTP 200. |
@@ -307,6 +309,9 @@ Current behavior that must be preserved unless the owner asks for a breaking cha
   strings throw `IllegalArgumentException`, mapped to `400 Bad Request`.
 - `recipe.name` and the ingredient triple are unique. A constraint violation is mapped
   to `409 Conflict` with a generic message.
+- `GET /recipe` returns `{content, page, size, totalElements, totalPages}`, sorted by
+  `name`. `page` defaults to `0`; `size` defaults to `20` and is limited to `1..100`.
+  Invalid or non-numeric values return `400 Bad Request`.
 - `DELETE /recipe/{uuid}` removes join rows and deletes only ingredients no other recipe
   references. Shared ingredients are kept; the response is `200 OK` with `"OK"`.
 - Replacing a recipe's `ingredients` on `POST`/`PUT` deletes the dropped ingredients that
@@ -347,7 +352,7 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (38 tests):
+Current coverage (42 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
@@ -366,7 +371,8 @@ Current coverage (38 tests):
   rollback, upsert-by-name (200 on update), validation (400, including overlong and
   blank fields), PUT with matching/omitted/mismatched UUID, delete, delete 404, orphan
   cleanup, update cleanup for dropped and shared ingredients, ignored client-supplied
-  UUID on create, and shared-ingredient delete (200, ingredient kept).
+  UUID on create, pagination defaults/bounds, and shared-ingredient delete (200,
+  ingredient kept).
 
 Guidance:
 
@@ -402,9 +408,8 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. `GET /recipe` has no pagination.
-3. No authentication or rate limiting.
-4. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
+2. No authentication or rate limiting.
+3. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 
 ## Change workflow

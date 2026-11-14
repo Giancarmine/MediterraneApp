@@ -33,7 +33,7 @@ Severity:
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | **Fixed** |
 | OPS-3 | P2 | No authentication or rate limiting | Open |
 | OPS-4 | P2 | No CORS or actuator surface | **Fixed** |
-| API-5 | P2 | No pagination on `GET /recipe` | Open |
+| API-5 | P2 | No pagination on `GET /recipe` | **Fixed** |
 | API-6 | P2 | `POST /recipe/bulk` was not transactional | **Fixed** |
 | API-7 | P2 | Client-supplied UUID on create returned 500 | **Fixed** |
 | CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | **Fixed** |
@@ -138,7 +138,7 @@ cascade.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 38 tests covering the two mappers, the repositories, the
+**Fix applied:** added 42 tests covering the two mappers, the repositories, the
 exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
 `test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
@@ -264,10 +264,14 @@ endpoint, a successful preflight for a configured origin, and `403` for an unkno
 
 ### API-5 — No pagination on `GET /recipe`
 
-**Evidence:** `recipeService.getAllRecipe()` calls `findAll()` and returns every row.
+**Evidence:** `recipeService.getAllRecipe()` called `findAll()` and returned every row.
 
-**Fix:** accept `page` and `size` (or cursor parameters), return a page envelope, and
-document the change. This is a response-shape change; coordinate it with clients.
+**Fix applied:** `GET /recipe` now accepts `page` (default `0`) and `size` (default `20`,
+capped at `100`) and returns a `PageResponse` envelope:
+`{content, page, size, totalElements, totalPages}`, sorted by `name`. The page is mapped
+to DTOs inside a read-only transaction, and `@BatchSize` limits the collection queries.
+Out-of-range or non-numeric parameters return `400 Bad Request`. This is a deliberate
+breaking change: the response used to be a bare array.
 
 ### API-6 — `POST /recipe/bulk` was not transactional
 
@@ -379,7 +383,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 38 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 42 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -390,12 +394,12 @@ coordinates and any dependency references.
 - Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
   low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
-  upsert, bulk including rollback, validation, missing row returning 404, invalid UUID
-  returning 400, PUT with matching/omitted/mismatched UUID, delete with 404 and orphan
-  cleanup, update cleanup for dropped and shared ingredients, shared-ingredient delete,
-  ignored client-supplied UUID on create, and unique-constraint conflicts returning 409).
-  The same behavior is expected on PostgreSQL, but it was not exercised against a live
-  PostgreSQL server.
+  paginated list including invalid page/size, upsert, bulk including rollback,
+  validation, missing row returning 404, invalid UUID returning 400, PUT with
+  matching/omitted/mismatched UUID, delete with 404 and orphan cleanup, update cleanup
+  for dropped and shared ingredients, shared-ingredient delete, ignored client-supplied
+  UUID on create, and unique-constraint conflicts returning 409). The same behavior is
+  expected on PostgreSQL, but it was not exercised against a live PostgreSQL server.
 - Flyway applies `db/migration/V1__baseline.sql` before Hibernate starts, and
   `ddl-auto: validate` rejects entity/schema drift. The test profile runs the same
   migration against H2.

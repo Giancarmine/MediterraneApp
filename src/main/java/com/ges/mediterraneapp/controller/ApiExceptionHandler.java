@@ -2,7 +2,6 @@ package com.ges.mediterraneapp.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
-import org.springframework.context.MessageSourceResolvable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.OffsetDateTime;
 import java.util.NoSuchElementException;
@@ -40,8 +40,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ApiError> handleMethodValidation(HandlerMethodValidationException ex, HttpServletRequest request) {
         String message = ex.getParameterValidationResults().stream()
-                .flatMap(result -> result.getResolvableErrors().stream())
-                .map(ApiExceptionHandler::describe)
+                .flatMap(result -> {
+                    String name = result.getMethodParameter().getParameterName();
+                    return result.getResolvableErrors().stream()
+                            .map(error -> name + " " + error.getDefaultMessage());
+                })
                 .filter(Objects::nonNull)
                 .collect(Collectors.joining("; "));
         return error(HttpStatus.BAD_REQUEST, message, request);
@@ -52,16 +55,14 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, ex.getName() + " has an invalid value", request);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleConflict(DataIntegrityViolationException ex, HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "Request conflicts with existing data", request);
-    }
-
-    private static String describe(MessageSourceResolvable error) {
-        if (error instanceof org.springframework.validation.FieldError fieldError) {
-            return fieldError.getField() + " " + fieldError.getDefaultMessage();
-        }
-        return error.getDefaultMessage();
     }
 
     private ResponseEntity<ApiError> error(HttpStatus status, String message, HttpServletRequest request) {
