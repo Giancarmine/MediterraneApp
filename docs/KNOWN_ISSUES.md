@@ -28,7 +28,7 @@ Severity:
 | DEV-4 | P1 | Jasypt 2.0.0 could not be resolved | **Fixed** |
 | CODE-1 | P2 | `StepRepository` is malformed and unused | **Fixed** |
 | DATA-2 | P2 | Ingredient triple has no unique constraint | **Fixed** |
-| DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
+| DATA-3 | P2 | `ddl-auto: update` was the only schema management | **Fixed** |
 | DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | **Fixed** |
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | **Fixed** |
 | OPS-3 | P2 | No authentication or rate limiting | Open |
@@ -205,15 +205,22 @@ set and skips cleanup. Integration tests cover the orphaned and shared cases. Th
 completes the ownership cleanup; the remaining decision is whether ingredient rows should
 be normalized or garbage-collected in a migration.
 
-### DATA-3 — `ddl-auto: update` is the only schema management
+### DATA-3 — `ddl-auto: update` was the only schema management
 
-**Evidence:** `spring.jpa.hibernate.ddl-auto=update`; no Flyway or Liquibase.
+**Evidence:** `spring.jpa.hibernate.ddl-auto=update`; there were no Flyway or Liquibase
+migrations.
 
 **Risks:** implicit changes, no rollback, no reviewable migrations, and destructive
 changes are not applied. Not suitable for production.
 
-**Fix:** add Flyway or Liquibase, write a baseline migration for the current schema,
-then switch to `ddl-auto: validate`. Test migrations against a copy of real data.
+**Fix applied:** added `spring-boot-starter-flyway` and
+`db/migration/V1__baseline.sql`, which matches the current entity model. Hibernate now
+runs with `ddl-auto: validate`. `baseline-on-migrate` is enabled with
+`baseline-version: 1`, so legacy databases created by `ddl-auto: update` are marked at V1
+instead of being recreated. The test profile runs Flyway against H2 and validates the
+schema, so every build exercises the migration. Future schema changes need a new
+`V2__*.sql`; never edit an applied migration. Migrations have not been run against a live
+PostgreSQL server in this environment.
 
 ### OPS-2 — Dockerfile used a fragile wildcard copy
 
@@ -389,6 +396,9 @@ coordinates and any dependency references.
   ignored client-supplied UUID on create, and unique-constraint conflicts returning 409).
   The same behavior is expected on PostgreSQL, but it was not exercised against a live
   PostgreSQL server.
+- Flyway applies `db/migration/V1__baseline.sql` before Hibernate starts, and
+  `ddl-auto: validate` rejects entity/schema drift. The test profile runs the same
+  migration against H2.
 - UUIDs use Hibernate's `@UuidGenerator`; the deprecated `@GenericGenerator(uuid2)` and
   `HttpStatus.I_AM_A_TEAPOT` constant were removed. The status endpoint uses
   `HttpStatus.valueOf(418)` and still writes `"I_AM_A_TEAPOT"`.

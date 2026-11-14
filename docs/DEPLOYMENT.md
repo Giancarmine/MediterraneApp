@@ -8,7 +8,7 @@ datasource through the environment; the paths below are templates.
 
 - JDK 25 LTS (the POM targets Java 25).
 - Maven is not required separately: the committed wrapper downloads Maven 3.9.16.
-- PostgreSQL for a real run (12 or newer recommended). The schema is created by Hibernate.
+- PostgreSQL for a real run (12 or newer recommended). Flyway creates the schema.
 - Docker is optional.
 
 ## Local run
@@ -47,12 +47,16 @@ datasource through the environment; the paths below are templates.
    # 200, body: []
    ```
 
-The first startup creates the tables because `spring.jpa.hibernate.ddl-auto=update`.
-There are no migration scripts. Existing databases must be cleaned up before this version
-starts: `recipe.name` now carries a unique constraint (`uk_recipe_name`) and the ingredient
-triple `(name_ingredient, amount, measurement)` carries `uk_ingredient_identity`.
-`ddl-auto: update` does not reconcile data that violates a new constraint, so delete or
-merge duplicates first; otherwise the schema update fails at startup.
+On the first startup Flyway applies `db/migration/V1__baseline.sql`, then Hibernate
+validates the schema with `spring.jpa.hibernate.ddl-auto=validate`. There is one baseline
+migration; add `V2__*.sql` (and so on) for later schema changes. Never edit an applied
+migration: Flyway checksums it and startup fails if the file changes.
+
+Existing databases previously managed by `ddl-auto: update` are baselined at version 1 by
+`spring.flyway.baseline-on-migrate`, so the baseline script is not re-run. They must
+already contain the current schema, including `uk_recipe_name` and
+`uk_ingredient_identity`. Clean up duplicate names or ingredient triples before upgrading;
+otherwise the constraints may be missing or the migration/validation fails.
 
 ### Using `.env`
 
@@ -78,7 +82,8 @@ Other current settings:
 
 - Hikari: `connectionTimeout=20000`, `maximumPoolSize=5`.
 - `spring.jpa.show-sql=true`.
-- `spring.jpa.hibernate.ddl-auto=update`.
+- `spring.jpa.hibernate.ddl-auto=validate`; Flyway applies migrations from
+  `src/main/resources/db/migration` and baselines existing schemas at V1.
 - Unique constraints: `uk_recipe_name` and `uk_ingredient_identity`. Deduplicate existing
   data before deploying this version.
 - Hibernate auto-detects the dialect from the JDBC connection. There is no explicit
@@ -154,8 +159,8 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
   remain in Git history.
 - [ ] Provide the datasource through the platform's secret store, not
   `application.yml`.
-- [ ] Set `spring.jpa.hibernate.ddl-auto=validate` and manage the schema with Flyway or
-  Liquibase.
+- [x] Use Flyway with `spring.jpa.hibernate.ddl-auto=validate`; add a new versioned
+  migration for every schema change.
 - [ ] Disable `show-sql` or route it to a controlled logger.
 - [ ] Add authentication and TLS termination in front of the API.
 - [ ] Add a health endpoint that checks the database if the platform needs one.
@@ -170,6 +175,6 @@ Heroku's free PostgreSQL and dyno tiers no longer exist. The old host was remove
 | `UnknownHostException` or connection timeout at startup | No datasource is configured, or it points at the retired host | Set `SPRING_DATASOURCE_*` to a reachable database |
 | `./mvnw: ... .mvn/wrapper/maven-wrapper.properties: No such file` | Wrapper was incomplete in older commits | Pull the current wrapper files or use a local Maven 3.9+ |
 | `Port 8080 was already in use` | Another process owns the port | Set `SERVER_PORT` or stop the other process |
-| Tables are missing | Database user cannot create tables, or `ddl-auto` was changed | Grant schema privileges or run migrations |
+| Tables are missing | Migrations did not run, or the database user cannot create tables | Grant schema privileges and check the Flyway log |
 | `IncorrectResultSizeDataAccessException` | Duplicate ingredient triples | Deduplicate ingredients and add a unique constraint |
 | Build fails on JDK 24 or older | Boot 4 and the POM require Java 25 | Build with JDK 25 |
