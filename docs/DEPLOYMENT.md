@@ -125,14 +125,21 @@ The Dockerfile is a two-stage build:
 1. `maven:3.9-eclipse-temurin-25` runs the committed wrapper
    (`./mvnw -B -ntp -DskipTests package`).
 2. `eclipse-temurin:25-jre` copies the exact
-   `target/mediterraneapp-0.0.1-SNAPSHOT.jar`, installs `curl`, runs the app as the
-   non-root `app` user, and checks `/recipe/status` with a `HEALTHCHECK`.
+   `target/mediterraneapp-0.0.1-SNAPSHOT.jar` to `/app/app.jar`, installs `curl`, runs
+   the app as the non-root `app` user, and checks `/recipe/status` with a `HEALTHCHECK`.
+   The entrypoint starts `/app/app.jar`.
+
+The image was built and run locally on 2026-11-14 against PostgreSQL 16.16: Flyway
+applied `V1__baseline.sql`, Hibernate validated the schema, the container reported
+healthy, requests ran as uid 999 (`app`), and `GET /recipe/status`, `/actuator/health`,
+the `401` for a missing key, paged `GET /recipe`, and `POST /recipe` all behaved as
+documented. That run also caught the entrypoint path (`/app.jar` instead of
+`/app/app.jar`), which had made the image impossible to start.
 
 Known limitations (see [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)):
 
 - The images are current Temurin 25 tags, but they are not pinned to a digest.
-- The build was not exercised locally because Docker is unavailable; validate the image
-  in a Docker-capable environment before deploying.
+- CI builds the Maven project only; it does not build or smoke-test the container image.
 
 ## Heroku (legacy)
 
