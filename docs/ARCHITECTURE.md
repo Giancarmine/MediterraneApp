@@ -53,8 +53,7 @@ src/main/java/com/ges/mediterraneapp/
     │   ├── Ingredient.java            JPA entity
     │   └── repository/
     │       ├── RecipeRepository.java
-    │       ├── IngredientRepository.java
-    │       └── StepRepository.java    unused placeholder
+    │       └── IngredientRepository.java
     └── dto/
         ├── RecipeDto.java
         └── IngredientDto.java
@@ -72,7 +71,6 @@ src/main/java/com/ges/mediterraneapp/
 | `IngredientMapper` | Entity/DTO conversion | `toDto` is package-private. |
 | `RecipeRepository` | `findByUuid`, `findByName`, `existsByIngredients_Uuid` | Derived queries. |
 | `IngredientRepository` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement` | The triple is unique in the schema. |
-| `StepRepository` | Unused | Misdeclared; see below. |
 | `Recipe` | Persistence model | Unidirectional many-to-many to ingredients; element collection for steps; unique `name`. |
 | `Ingredient` | Persistence model | No back-reference to recipes. |
 | `RecipeDto` / `IngredientDto` | JSON contract | `@JsonInclude(NON_NULL)`, string UUIDs. |
@@ -100,7 +98,8 @@ There is no transaction annotation. Each repository call runs in its own transac
 3. `doUpsert` looks the recipe up by `name`:
    - a miss creates a new entity;
    - a hit returns the existing entity.
-4. For a brand-new recipe, a client-supplied UUID is applied to the new entity.
+4. The identifier is always server-generated. A client-supplied UUID is ignored on
+   create; the generated value is returned in the response.
 5. `RecipeMapper.updateModel` never rewrites the entity UUID:
    - copies every scalar field, including nulls;
    - replaces `steps` only when the request field is non-null;
@@ -197,8 +196,7 @@ Details:
 - no datasource credentials; the URL, username, and password come from
   `SPRING_DATASOURCE_*` at runtime;
 - `show-sql: true`;
-- `ddl-auto: update`;
-- a misspelled dialect property.
+- `ddl-auto: update`.
 
 There is no configuration-encryption layer. Jasypt was removed because no `ENC(...)`
 values are configured and the datasource is supplied through the environment.
@@ -234,22 +232,7 @@ Changes that need an explicit decision:
 
 - Upgrading or downgrading Spring Boot (the code uses the `jakarta.*` namespace).
 - Changing the upsert key from `name` to `uuid`.
-- Changing the ingredient ownership/cleanup strategy (for example, deleting an
-  ingredient that a recipe update no longer references; see `DATA-4`).
+- Changing the ingredient ownership or normalization strategy (for example, introducing
+  a canonical ingredient table instead of the free-text triple).
 - Adding authentication or a browser frontend.
 - Moving to a multi-module build.
-
-## Unused or malformed code
-
-`StepRepository` declares:
-
-```java
-public interface StepRepository<String, UUID> extends Repository {
-    Optional<String> findByStep(String step);
-}
-```
-
-`Repository` resolves to the `org.springframework.stereotype.Repository` annotation, not
-`org.springframework.data.repository.Repository`. The type parameters also shadow
-`java.lang.String` and `java.util.UUID`. The file compiles but is not a Spring Data
-repository and is not used. Prefer deleting it; do not copy it as a pattern.

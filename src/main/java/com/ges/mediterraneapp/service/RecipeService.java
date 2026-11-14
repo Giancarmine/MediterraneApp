@@ -86,10 +86,9 @@ public class RecipeService {
                 .orElseGet(Recipe::new);
         boolean created = recipe.getUuid() == null;
 
-        if (created && recipeDto.getUuid() != null) {
-            recipe.setUuid(UUID.fromString(recipeDto.getUuid()));
-        }
-
+        // The identifier is always generated. A client-supplied uuid is ignored: a
+        // pre-assigned identifier makes Spring Data merge instead of persist, which
+        // fails for a row that does not exist yet.
         return new UpsertResult(applyUpdate(recipe, recipeDto), created);
     }
 

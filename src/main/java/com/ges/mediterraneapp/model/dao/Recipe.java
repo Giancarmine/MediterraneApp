@@ -2,8 +2,8 @@ package com.ges.mediterraneapp.model.dao;
 
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.UuidGenerator;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import jakarta.persistence.*;
@@ -17,8 +17,8 @@ import java.util.UUID;
 @EntityListeners(AuditingEntityListener.class)
 public class Recipe {
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
+    @GeneratedValue
+    @UuidGenerator
     @Column(name = "uuid", updatable = false, nullable = false)
     UUID uuid;
 

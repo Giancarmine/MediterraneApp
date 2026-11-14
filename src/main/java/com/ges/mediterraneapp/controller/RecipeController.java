@@ -24,7 +24,7 @@ public class RecipeController {
 
     @GetMapping("/status")
     public HttpStatus status() {
-        return HttpStatus.I_AM_A_TEAPOT;
+        return HttpStatus.valueOf(418);
     }
 
     @GetMapping

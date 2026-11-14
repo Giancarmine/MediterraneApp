@@ -72,8 +72,9 @@ Content-Type: application/json
 "I_AM_A_TEAPOT"
 ```
 
-The method returns `HttpStatus.I_AM_A_TEAPOT` from a `@RestController`, so the response
-body is the JSON string `"I_AM_A_TEAPOT"`. It does **not** return HTTP 418.
+The method returns the 418 `HttpStatus` constant (`HttpStatus.valueOf(418)`) from a
+`@RestController`, so the response body is the JSON string `"I_AM_A_TEAPOT"`. It does
+**not** return HTTP 418.
 `JacksonConfig` registers an `HttpStatus` serializer that writes `name()`, because
 Jackson 3 would otherwise use `toString()` and produce `"418 I_AM_A_TEAPOT"`.
 
@@ -148,8 +149,9 @@ Behavior:
 - The service looks up the recipe by `name` inside the request transaction.
 - If a recipe with that name exists, the existing entity is updated and the response is
   `200 OK`.
-- If no recipe exists, a new entity is created and the response is `201 Created`. A
-  client-supplied `uuid` is accepted only in this new-name path.
+- If no recipe exists, a new entity is created and the response is `201 Created`. The
+  identifier is always server-generated; a client-supplied `uuid` is ignored on create.
+  Sending a non-null `uuid` used to fail the insert with a `500`.
 - `name` is unique. A concurrent create that loses the race fails the unique constraint
   and returns `409 Conflict`.
 - Ingredients are resolved by the exact triple
@@ -297,6 +299,8 @@ is a concern.
   can be applied.
 - The path UUID is authoritative for `PUT /recipe/{uuid}`; a mismatched body UUID is a
   `400`.
+- `POST /recipe` always generates the recipe UUID. A client-supplied `uuid` is ignored on
+  create; it used to produce a `500`, so do not advertise it as assignable.
 - Keep the validation rules and their `400` responses in sync with this document.
 - If you add an ingredient endpoint, document it here and update
   [`../AGENTS.md`](../AGENTS.md).

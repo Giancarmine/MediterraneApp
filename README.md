@@ -111,8 +111,9 @@ docker run --rm -p 8080:8080 \
   mediterraneapp
 ```
 
-The Dockerfile uses `maven:3.9-eclipse-temurin-25` to build and
-`eclipse-temurin:25-jre` to run.
+The Dockerfile builds with `maven:3.9-eclipse-temurin-25` and runs on
+`eclipse-temurin:25-jre`. The runtime image uses a non-root `app` user and exposes a
+`HEALTHCHECK` against `/recipe/status`.
 
 ## Documentation
 

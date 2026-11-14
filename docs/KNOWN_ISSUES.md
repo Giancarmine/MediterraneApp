@@ -26,20 +26,21 @@ Severity:
 | DEV-2 | P1 | No CI | **Fixed** |
 | DEV-3 | P3 | Maven wrapper was incomplete | **Fixed** |
 | DEV-4 | P1 | Jasypt 2.0.0 could not be resolved | **Fixed** |
-| CODE-1 | P2 | `StepRepository` is malformed and unused | Open |
+| CODE-1 | P2 | `StepRepository` is malformed and unused | **Fixed** |
 | DATA-2 | P2 | Ingredient triple has no unique constraint | **Fixed** |
 | DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
 | DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | **Fixed** |
-| OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | Open |
+| OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | **Fixed** |
 | OPS-3 | P2 | No auth, CORS, actuator, or rate limiting | Open |
 | API-5 | P2 | No pagination on `GET /recipe` | Open |
 | API-6 | P2 | `POST /recipe/bulk` was not transactional | **Fixed** |
-| CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | Open |
+| API-7 | P2 | Client-supplied UUID on create returned 500 | **Fixed** |
+| CFG-1 | P2 | Hibernate dialect is misspelled and misplaced | **Fixed** |
 | DEV-5 | P2 | Mapper is constructed manually in the controller | **Fixed** |
 | DEV-6 | P3 | `@Autowired` on final fields was redundant | **Fixed** |
 | SEC-2 | P3 | Jasypt carried a low-severity advisory | **Fixed** |
 | REPO-1 | P3 | `mediterraneapp.iml` was tracked | **Fixed** |
-| REPO-2 | P3 | `HELP.md` is stale generated output | Open |
+| REPO-2 | P3 | `HELP.md` is stale generated output | **Fixed** |
 | REPO-3 | P3 | Trailing-dot Maven `groupId` | Open |
 
 ## P0 — security and data loss
@@ -136,7 +137,7 @@ cascade.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 33 tests covering the two mappers, the repositories, the
+**Fix applied:** added 34 tests covering the two mappers, the repositories, the
 exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
 `test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
@@ -166,16 +167,16 @@ are introduced later, add a maintained encryption solution and document it.
 
 ## P2 — correctness and maintainability
 
-### CODE-1 — `StepRepository` is malformed and unused
+### CODE-1 — `StepRepository` was malformed and unused
 
-**Evidence:** `StepRepository` extends the `org.springframework.stereotype.Repository`
-annotation instead of `org.springframework.data.repository.Repository`, and declares
-type parameters named `String` and `UUID` that shadow the real types. It compiles but
-is not a Spring Data repository and is never injected.
+**Evidence:** `StepRepository` extended the `org.springframework.stereotype.Repository`
+annotation instead of `org.springframework.data.repository.Repository`, and declared type
+parameters named `String` and `UUID` that shadowed the real types. It compiled but was
+not a Spring Data repository and was never injected.
 
-**Fix:** delete the file. There is no `Step` entity; steps are an `@ElementCollection`
-on `Recipe`. If a separate step entity is introduced, model it explicitly and extend
-`JpaRepository<Step, UUID>`.
+**Fix applied:** deleted the file. There is no `Step` entity; steps are an
+`@ElementCollection` on `Recipe`. If a separate step entity is introduced later, model it
+explicitly and extend `JpaRepository<Step, UUID>`.
 
 ### DATA-2 — Ingredient triple had no unique constraint
 
@@ -213,18 +214,21 @@ changes are not applied. Not suitable for production.
 **Fix:** add Flyway or Liquibase, write a baseline migration for the current schema,
 then switch to `ddl-auto: validate`. Test migrations against a copy of real data.
 
-### OPS-2 — Dockerfile uses a fragile wildcard copy
+### OPS-2 — Dockerfile used a fragile wildcard copy
 
 **Evidence:**
 
-- `COPY --from=build "MediterraneApp/target/*.jar" app.jar` quotes a wildcard; Docker
+- `COPY --from=build "MediterraneApp/target/*.jar" app.jar` quoted a wildcard; Docker
   does not expand globs inside quotes.
-- The build stage runs `mvn clean install` without skipping tests.
+- The build stage ran `mvn clean install` without skipping tests.
 - No `HEALTHCHECK`, no non-root user.
 
-**Fix:** copy the exact JAR or an unquoted glob, add a non-root user, and add a health
-check. Build with the committed wrapper (`./mvnw`) for reproducibility. The provided
-`.dockerignore` keeps `target/` and IDE state out of the build context.
+**Fix applied:** the Dockerfile builds with the committed wrapper
+(`./mvnw -B -ntp -DskipTests package`), copies the exact JAR
+(`target/mediterraneapp-0.0.1-SNAPSHOT.jar`), runs as the non-root `app` user, exposes
+port 8080, and adds a `HEALTHCHECK` against `/recipe/status`. The `.dockerignore` keeps
+`target/` and IDE state out of the build context. The build was not exercised locally
+because Docker is unavailable in this environment; CI validates the Maven build only.
 
 ### OPS-3 — No auth, CORS, actuator, or rate limiting
 
@@ -254,7 +258,20 @@ item returns `400` and writes nothing. Integration tests cover both the invalid-
 and the all-or-nothing contract. Returning per-item results remains a possible future
 change.
 
-### CFG-1 — Hibernate dialect is misspelled and misplaced
+### API-7 — Client-supplied UUID on create returned 500
+
+**Evidence:** `doUpsert` copied a client-supplied `uuid` onto a new entity with a
+generated identifier. Spring Data saw a non-null ID and used `merge`, which tried to
+update a row that did not exist; the request returned `500`
+(`ObjectOptimisticLockingFailureException`). The documentation claimed the value was
+accepted, but no test covered it.
+
+**Fix applied:** the identifier is always server-generated and a client-supplied `uuid`
+is ignored on create. `POST` still upserts by name and returns the generated UUID.
+An integration test asserts the supplied value is not used and that the generated row
+exists.
+
+### CFG-1 — Hibernate dialect was misspelled and misplaced
 
 **Evidence:**
 
@@ -265,19 +282,13 @@ spring:
       dialect: org.hibernate.dialect.PostgreSQLDialec
 ```
 
-The value is truncated, and `dialect` belongs under
-`spring.jpa.properties.hibernate.dialect`. Hibernate currently auto-detects the
-dialect, so the app still works.
+The value was truncated, and `dialect` belongs under
+`spring.jpa.properties.hibernate.dialect`. Hibernate auto-detected the dialect, so the
+application still worked.
 
-**Fix:** remove the line (preferred with a single known database) or set:
-
-```yaml
-spring:
-  jpa:
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-```
+**Fix applied:** removed the line. Hibernate auto-detects the dialect from the JDBC
+connection, which is preferable with a single known database. If an explicit dialect is
+needed later, set it under `spring.jpa.properties.hibernate.dialect`.
 
 ### DEV-5 — Mapper was constructed manually in the controller
 
@@ -326,13 +337,12 @@ manually.
 **Fix applied:** removed the file. `.gitignore` still ignores `*.iml`; regenerate it
 locally if needed.
 
-### REPO-2 — `HELP.md` is stale generated output
+### REPO-2 — `HELP.md` was stale generated output
 
-**Evidence:** Spring Initializr generated `HELP.md`, which points at old Spring Boot
-documentation and adds nothing beyond [`README.md`](../README.md).
+**Evidence:** Spring Initializr generated `HELP.md`, which pointed at old Spring Boot
+documentation and added nothing beyond [`README.md`](../README.md).
 
-**Fix:** delete it, or regenerate it if the project is upgraded. Do not treat it as
-project documentation.
+**Fix applied:** deleted it. Treat this file as the project documentation index instead.
 
 ### REPO-3 — Trailing-dot Maven `groupId`
 
@@ -347,7 +357,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 33 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 34 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -359,5 +369,11 @@ coordinates and any dependency references.
   upsert, bulk including rollback, validation, missing row returning 404, invalid UUID
   returning 400, PUT with matching/omitted/mismatched UUID, delete with 404 and orphan
   cleanup, update cleanup for dropped and shared ingredients, shared-ingredient delete,
-  and unique-constraint conflicts returning 409). The same behavior is expected on
-  PostgreSQL, but it was not exercised against a live PostgreSQL server.
+  ignored client-supplied UUID on create, and unique-constraint conflicts returning 409).
+  The same behavior is expected on PostgreSQL, but it was not exercised against a live
+  PostgreSQL server.
+- UUIDs use Hibernate's `@UuidGenerator`; the deprecated `@GenericGenerator(uuid2)` and
+  `HttpStatus.I_AM_A_TEAPOT` constant were removed. The status endpoint uses
+  `HttpStatus.valueOf(418)` and still writes `"I_AM_A_TEAPOT"`.
+- The Dockerfile was hardened but not built locally: Docker is not available in this
+  environment. Validate it in a Docker-capable environment before deploying.

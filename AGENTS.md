@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 16 main Java files, about 600 lines, 33 tests |
+| Size | 15 main Java files, about 600 lines, 34 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -203,7 +203,6 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `model/dao/Ingredient.java` | JPA entity: amount, measurement, ingredient name, timestamps. |
 | `model/dao/repository/RecipeRepository.java` | `findByUuid`, `findByName`, `existsByIngredients_Uuid`. |
 | `model/dao/repository/IngredientRepository.java` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement`. |
-| `model/dao/repository/StepRepository.java` | Unused, malformed placeholder; see known issues. |
 | `model/dto/RecipeDto.java` | JSON shape for recipes; `NON_NULL` inclusion. |
 | `model/dto/IngredientDto.java` | JSON shape for ingredients; `NON_NULL` inclusion. |
 | `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate settings. |
@@ -231,7 +230,7 @@ Reads are simpler: controller → service → repository → mapper → DTO.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `uuid` | `UUID` | Primary key, generated (`uuid2`). Exposed as a string. |
+| `uuid` | `UUID` | Primary key, generated (`@UuidGenerator`). Exposed as a string. |
 | `name` | `String` | Unique (`uk_recipe_name`); used as the upsert key by `POST /recipe`. |
 | `relations` | `String` | Free-text field; meaning is undocumented. |
 | `preparedTime` | `String` | Free text, not a duration type. |
@@ -284,7 +283,8 @@ All paths are under `/recipe`. Full payloads and status codes are in
 Current behavior that must be preserved unless the owner asks for a breaking change:
 
 - `POST /recipe` upserts by `name`, not by UUID. It returns `201 Created` on create and
-  `200 OK` on update.
+  `200 OK` on update. The UUID is always server-generated; a supplied `uuid` is ignored
+  on create.
 - `PUT /recipe/{uuid}` keeps the loaded entity's UUID. The body `uuid` is optional; a
   mismatch returns `400 Bad Request` and leaves the row unchanged.
 - `@NotBlank` and `@Size` on `RecipeDto` and `IngredientDto` make `@Valid` effective.
@@ -334,7 +334,7 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (33 tests):
+Current coverage (34 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
@@ -348,8 +348,8 @@ Current coverage (33 tests):
   covers status, create, list, get, missing row (404), invalid UUID (400), bulk, bulk
   rollback, upsert-by-name (200 on update), validation (400, including overlong and
   blank fields), PUT with matching/omitted/mismatched UUID, delete, delete 404, orphan
-  cleanup, update cleanup for dropped and shared ingredients, and shared-ingredient
-  delete (200, ingredient kept).
+  cleanup, update cleanup for dropped and shared ingredients, ignored client-supplied
+  UUID on create, and shared-ingredient delete (200, ingredient kept).
 
 Guidance:
 
@@ -383,9 +383,10 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. `StepRepository` is unused and malformed.
-3. Dockerfile relies on a wildcard copy for the packaged JAR.
-4. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
+2. `ddl-auto: update` is the only schema management; no Flyway or Liquibase.
+3. `GET /recipe` has no pagination.
+4. No authentication, CORS, actuator, or rate limiting.
+5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 
 ## Change workflow

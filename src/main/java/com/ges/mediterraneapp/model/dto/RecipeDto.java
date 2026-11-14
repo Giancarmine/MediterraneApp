@@ -23,6 +23,5 @@ public class RecipeDto {
 
     Set<@Size(max = 2500) String> steps;
 
-    @Valid
-    Set<IngredientDto> ingredients;
+    Set<@Valid IngredientDto> ingredients;
 }

@@ -23,8 +23,7 @@
 - Services: `RecipeService`, `IngredientService`.
 - Mappers: `RecipeMapper`, `IngredientMapper` (hand-written, no MapStruct).
 - Entities: `Recipe`, `Ingredient`.
-- Repositories: `RecipeRepository`, `IngredientRepository`, plus unused
-  `StepRepository`.
+- Repositories: `RecipeRepository`, `IngredientRepository`.
 - Build and test: `./mvnw -B verify`. Tests run on H2 in PostgreSQL mode, so no
   database is required. CI runs the same command on JDK 25 (LTS).
 - Configuration: `src/main/resources/application.yml`; override the datasource with
@@ -38,7 +37,8 @@
 - `GET /recipe/{uuid}` -> one recipe; 404 if absent, 400 for an invalid UUID.
 - `POST /recipe` -> create or update by `name`; 201 on create, 200 on update, 409 on a
   unique-name conflict. Replacing `ingredients` deletes dropped ingredients that no
-  recipe references.
+  recipe references. The server always generates the UUID; a supplied one is ignored on
+  create.
 - `POST /recipe/bulk` -> batch create/update in one transaction, HTTP 200 body
   `"CREATED"`.
 - `PUT /recipe/{uuid}` -> update; the path UUID is authoritative, an optional body UUID
