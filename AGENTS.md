@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 15 main Java files, about 600 lines, 34 tests |
+| Size | 16 main Java files, about 650 lines, 38 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -35,8 +35,9 @@ consumed.
   `HttpStatus` serializer that writes `name()`, so the controller keeps returning the
   enum types. Do not replace that with `HttpStatus.*.name()` strings: a `String` return
   value is served as `text/plain` without quotes.
-- The test suite covers the mappers, the repository, and the HTTP API. It runs against
-  H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs no database.
+- The test suite covers the mappers, the repositories, actuator/CORS, and the HTTP API.
+  It runs against H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs
+  no database.
 - `ApiExceptionHandler` is the single `@RestControllerAdvice`. It maps
   `NoSuchElementException` to `404`, `IllegalArgumentException` plus Bean Validation
   failures to `400`, and `DataIntegrityViolationException` to a generic `409`, using the
@@ -45,8 +46,9 @@ consumed.
   datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
   application will not start without it.
 - GitHub Actions runs `./mvnw -B verify` on every push and pull request to `main`.
-  There is no migration tool, authentication, actuator, OpenAPI document, or API
-  versioning.
+  There is no migration tool, authentication, OpenAPI document, or API versioning.
+  Actuator exposes only `health` and `info`, and CORS is opt-in through
+  `APP_CORS_ALLOWED_ORIGINS`.
 
 See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
 
@@ -159,15 +161,17 @@ binding means environment variables override it:
 | `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | Required at startup; no value is committed |
 | `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | Required at startup; no value is committed |
 | `SERVER_PORT` | `server.port` | Defaults to `8080` |
+| `APP_CORS_ALLOWED_ORIGINS` | `app.cors.allowed-origins` | Comma-separated origins; empty disables CORS |
 
 - `.env.example` lists the variable names. Spring Boot does **not** read `.env`
   automatically; export the variables, use `direnv`, or pass `--env-file` to Docker.
 - `spring.jpa.hibernate.ddl-auto` is `update`. Hibernate creates and alters tables from
   the entities. There is no Flyway or Liquibase.
 - `spring.jpa.show-sql` is `true`, so SQL is printed to the console.
-- The configured Hibernate dialect has a typo and is in the wrong property namespace.
-  Hibernate auto-detects the dialect, so the application still works. Do not copy the
-  current line as a pattern.
+- Actuator is on the classpath and exposes only `/actuator/health` and `/actuator/info`;
+  health details are hidden. Do not broaden the exposure set casually.
+- Hibernate auto-detects the dialect from the JDBC connection. Do not reintroduce an
+  explicit dialect property without a reason.
 
 ## Architecture at a glance
 
@@ -205,7 +209,9 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `model/dao/repository/IngredientRepository.java` | `findByUuid`, `findByNameIngredientAndAmountAndMeasurement`. |
 | `model/dto/RecipeDto.java` | JSON shape for recipes; `NON_NULL` inclusion. |
 | `model/dto/IngredientDto.java` | JSON shape for ingredients; `NON_NULL` inclusion. |
-| `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate settings. |
+| `config/JacksonConfig.java` | Preserves enum-name JSON for `HttpStatus` bodies. |
+| `config/CorsConfig.java` | Opt-in CORS for `/recipe/**` from configured origins. |
+| `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate, CORS, actuator. |
 
 There is no `IngredientController` and no service interfaces. `ApiExceptionHandler` is
 the only `@RestControllerAdvice`.
@@ -280,6 +286,9 @@ All paths are under `/recipe`. Full payloads and status codes are in
 | `PUT` | `/recipe/{uuid}` | Updates a recipe. The path UUID is authoritative; a body UUID is optional and must match. |
 | `DELETE` | `/recipe/{uuid}` | Deletes a recipe, returns `"OK"` with HTTP 200. |
 
+Operational endpoints are outside `/recipe`: `GET /actuator/health` (status only) and
+`GET /actuator/info`. No other actuator endpoints are exposed.
+
 Current behavior that must be preserved unless the owner asks for a breaking change:
 
 - `POST /recipe` upserts by `name`, not by UUID. It returns `201 Created` on create and
@@ -334,7 +343,7 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (34 tests):
+Current coverage (38 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
@@ -343,6 +352,10 @@ Current coverage (34 tests):
   plus the unique-name constraint.
 - `model/dao/repository/IngredientRepositoryTest` — unique ingredient identity triple.
 - `controller/ApiExceptionHandlerTest` — `409` mapping without leaking database details.
+- `ActuatorTest` — health is exposed with `UP` and no details, and other endpoints are
+  not exposed.
+- `CorsConfigTest` — a configured origin passes preflight and an unknown origin is
+  rejected.
 - `RecipeApiIntegrationTest` — full HTTP behavior with `@SpringBootTest(RANDOM_PORT)`
   and `TestRestTemplate`, so error responses go through the real error dispatch. It
   covers status, create, list, get, missing row (404), invalid UUID (400), bulk, bulk
@@ -369,7 +382,9 @@ Guidance:
 
 - No endpoint has authentication or authorization. Do not expose this API publicly
   without adding both.
-- No CORS configuration exists. Add it explicitly if a browser client is introduced.
+- No authentication or rate limiting exists. Add both before exposing the API publicly.
+- CORS is disabled unless `APP_CORS_ALLOWED_ORIGINS` lists one or more origins. Add
+  origins deliberately; there is no wildcard default.
 - Input validation uses `@NotBlank` and `@Size` on the DTOs. Add further constraints
   deliberately and document the new `400` responses.
 - Never log request bodies blindly; they can contain data that should not be retained.
@@ -385,7 +400,7 @@ The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Hi
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
 2. `ddl-auto: update` is the only schema management; no Flyway or Liquibase.
 3. `GET /recipe` has no pagination.
-4. No authentication, CORS, actuator, or rate limiting.
+4. No authentication or rate limiting.
 5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 

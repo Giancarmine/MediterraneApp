@@ -74,6 +74,8 @@ src/main/java/com/ges/mediterraneapp/
 | `Recipe` | Persistence model | Unidirectional many-to-many to ingredients; element collection for steps; unique `name`. |
 | `Ingredient` | Persistence model | No back-reference to recipes. |
 | `RecipeDto` / `IngredientDto` | JSON contract | `@JsonInclude(NON_NULL)`, string UUIDs. |
+| `JacksonConfig` | JSON customization | Registers an `HttpStatus` serializer that writes `name()`, preserving the historical bodies. |
+| `CorsConfig` | Opt-in CORS | Adds `/recipe/**` mappings only when `app.cors.allowed-origins` is non-empty. |
 
 ## Request flows
 
@@ -196,7 +198,14 @@ Details:
 - no datasource credentials; the URL, username, and password come from
   `SPRING_DATASOURCE_*` at runtime;
 - `show-sql: true`;
-- `ddl-auto: update`.
+- `ddl-auto: update`;
+- `management.endpoints.web.exposure.include: health,info`, with
+  `management.endpoint.health.show-details: never`;
+- `app.cors.allowed-origins`, bound from `APP_CORS_ALLOWED_ORIGINS` and empty by default.
+
+`CorsConfig` reads the origin list, trims it, drops blanks, and registers no mapping when
+the result is empty. Actuator uses the same port as the API; there is no separate
+management port.
 
 There is no configuration-encryption layer. Jasypt was removed because no `ENC(...)`
 values are configured and the datasource is supplied through the environment.
@@ -225,8 +234,8 @@ Safe, additive work:
 
 - Add `IngredientController` over the existing `IngredientService`.
 - Add pagination to `GET /recipe` (document the new parameters).
-- Add `spring-boot-starter-actuator` with only `health` and `info` exposed.
 - Add Flyway or Liquibase and switch `ddl-auto` to `validate`.
+- Broaden actuator exposure deliberately; keep `health`/`info` as the baseline.
 
 Changes that need an explicit decision:
 

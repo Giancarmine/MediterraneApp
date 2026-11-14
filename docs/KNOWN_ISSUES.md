@@ -31,7 +31,8 @@ Severity:
 | DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
 | DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | **Fixed** |
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | **Fixed** |
-| OPS-3 | P2 | No auth, CORS, actuator, or rate limiting | Open |
+| OPS-3 | P2 | No authentication or rate limiting | Open |
+| OPS-4 | P2 | No CORS or actuator surface | **Fixed** |
 | API-5 | P2 | No pagination on `GET /recipe` | Open |
 | API-6 | P2 | `POST /recipe/bulk` was not transactional | **Fixed** |
 | API-7 | P2 | Client-supplied UUID on create returned 500 | **Fixed** |
@@ -137,7 +138,7 @@ cascade.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 34 tests covering the two mappers, the repositories, the
+**Fix applied:** added 38 tests covering the two mappers, the repositories, the
 exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
 `test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
@@ -230,15 +231,29 @@ port 8080, and adds a `HEALTHCHECK` against `/recipe/status`. The `.dockerignore
 `target/` and IDE state out of the build context. The build was not exercised locally
 because Docker is unavailable in this environment; CI validates the Maven build only.
 
-### OPS-3 — No auth, CORS, actuator, or rate limiting
+### OPS-3 — No authentication or rate limiting
 
-**Evidence:** no security starter, no CORS configuration, no actuator dependency.
+**Evidence:** no security starter and no rate-limiting filter or gateway configuration.
+The API is reachable by anyone who can reach the port.
 
-**Risk:** anyone who can reach the port can read and mutate all data.
+**Risk:** anyone who can reach the port can read and mutate all data, and can exhaust
+resources with repeated requests.
 
-**Fix:** add authentication before exposing the API. Add CORS explicitly if a browser
-client is added. Add actuator only with a minimal exposure set (`health`, `info`). Add
-rate limiting at the gateway or with a filter.
+**Fix:** add authentication before exposing the API publicly, then add rate limiting at
+the gateway or with a filter. The mechanism (API key, OAuth2 resource server, session) is
+a product decision; document the chosen scheme here and in the API reference.
+
+### OPS-4 — No CORS or actuator surface
+
+**Evidence:** there was no CORS configuration and no actuator dependency, so a browser
+client could not call the API cross-origin and there was no health endpoint for a
+platform probe.
+
+**Fix applied:** `spring-boot-starter-actuator` exposes only `health` and `info`, with
+health details hidden. `CorsConfig` enables `/recipe/**` for the origins listed in
+`APP_CORS_ALLOWED_ORIGINS`; an empty list disables CORS, so same-origin clients are
+unaffected. Integration tests assert the health body, the `404` for an unexposed
+endpoint, a successful preflight for a configured origin, and `403` for an unknown one.
 
 ### API-5 — No pagination on `GET /recipe`
 
@@ -357,12 +372,14 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 34 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 38 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
 - No database credentials are committed; the datasource is supplied through
   `SPRING_DATASOURCE_*` at runtime.
+- Actuator exposes only `health` and `info`, with health details hidden. CORS is opt-in
+  through `APP_CORS_ALLOWED_ORIGINS` and adds no mapping when the list is empty.
 - Jasypt and `@EnableEncryptableProperties` were removed; the build no longer carries the
   low-severity Jasypt advisory.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,

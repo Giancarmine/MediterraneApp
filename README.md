@@ -14,6 +14,7 @@ ingredients, and their preparation steps in PostgreSQL.
 
 - Java 25 (LTS)
 - Spring Boot 4.1.2 (Spring MVC, Spring Data JPA, Hibernate 7)
+- Spring Boot Actuator (health and info only)
 - PostgreSQL
 - Lombok (version managed by the Spring Boot BOM)
 - Maven 3.9.16 via the committed wrapper (`./mvnw`)
@@ -34,6 +35,10 @@ All endpoints live under `/recipe`.
 
 Full payloads, status codes, and quirks are in [`docs/API.md`](docs/API.md). There is no
 ingredient endpoint yet.
+
+Operational endpoints: `GET /actuator/health` (status only) and `GET /actuator/info`.
+CORS is disabled by default; set `APP_CORS_ALLOWED_ORIGINS` to a comma-separated list of
+origins to enable it for `/recipe/**`.
 
 Example:
 
@@ -93,6 +98,7 @@ Spring Boot relaxed binding reads the datasource from the environment:
 | `SPRING_DATASOURCE_USERNAME` | Database user |
 | `SPRING_DATASOURCE_PASSWORD` | Database password |
 | `SERVER_PORT` | HTTP port, default `8080` |
+| `APP_CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins; empty disables CORS |
 
 See [`.env.example`](.env.example). Spring Boot does not load `.env` automatically;
 export the variables or pass the file to Docker.

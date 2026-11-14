@@ -248,6 +248,21 @@ There is no `IngredientController`. `IngredientService` and
 `IngredientRepository` exist, but ingredients can only be created or referenced through
 a recipe payload. Adding a public ingredient API is an additive change, not a refactor.
 
+## Operational endpoints
+
+Actuator is on the classpath with a deliberately narrow exposure set:
+
+- `GET /actuator/health` returns `{"status":"UP"}`. Health details are hidden, so the
+  body does not expose component or database information.
+- `GET /actuator/info` returns the (currently empty) info document.
+- Every other actuator endpoint returns `404 Not Found`.
+
+CORS is disabled by default. Set `APP_CORS_ALLOWED_ORIGINS` to a comma-separated list of
+origins (for example `https://app.example,https://admin.example`) to allow browser
+preflight and simple requests to `/recipe/**` for `GET`, `POST`, `PUT`, `DELETE`, and
+`OPTIONS` with a `Content-Type` header. Origins are matched exactly; there is no wildcard
+default, and an unlisted origin fails preflight with `403 Forbidden`.
+
 ## Error responses
 
 `ApiExceptionHandler` is a `@RestControllerAdvice` that maps:
