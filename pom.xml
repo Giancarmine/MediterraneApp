@@ -24,6 +24,12 @@
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
+		<!-- health/info only; see management.endpoints.web.exposure.include -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- Bean Validation (@Valid and jakarta.validation) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

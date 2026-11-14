@@ -1,0 +1,38 @@
+package com.ges.mediterraneapp.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.List;
+
+/**
+ * Enables CORS only when {@code app.cors.allowed-origins} is non-empty. The default is
+ * no cross-origin access, so existing same-origin clients keep working unchanged.
+ */
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+
+    private final List<String> allowedOrigins;
+
+    public CorsConfig(@Value("${app.cors.allowed-origins:}") List<String> allowedOrigins) {
+        this.allowedOrigins = allowedOrigins.stream()
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+    }
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        if (allowedOrigins.isEmpty()) {
+            return;
+        }
+
+        registry.addMapping("/recipe/**")
+                .allowedOrigins(allowedOrigins.toArray(String[]::new))
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("Content-Type")
+                .maxAge(3600);
+    }
+}

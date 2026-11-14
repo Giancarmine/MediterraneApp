@@ -68,6 +68,7 @@ to Docker with `--env-file`. Never commit a filled `.env`.
 | `SPRING_DATASOURCE_USERNAME` | none | Yes |
 | `SPRING_DATASOURCE_PASSWORD` | none | Yes |
 | `SERVER_PORT` | `8080` | No |
+| `APP_CORS_ALLOWED_ORIGINS` | empty (CORS disabled) | No |
 | `JAVA_OPTS` | none | No, used by the Docker `CMD` |
 
 Spring Boot relaxed binding maps `SPRING_DATASOURCE_*` to `spring.datasource.*`.
@@ -82,6 +83,12 @@ Other current settings:
   data before deploying this version.
 - Hibernate auto-detects the dialect from the JDBC connection. There is no explicit
   dialect property.
+- Actuator exposes only `GET /actuator/health` and `GET /actuator/info`; health details
+  are hidden. Point platform probes at `/actuator/health`. Other actuator endpoints
+  return `404`. Live and readiness probes share the same endpoint; there are no separate
+  liveness/readiness groups.
+- CORS is disabled unless `APP_CORS_ALLOWED_ORIGINS` lists one or more exact origins.
+  There is no wildcard default.
 
 ## Docker
 
