@@ -234,10 +234,20 @@ PostgreSQL server in this environment.
 
 **Fix applied:** the Dockerfile builds with the committed wrapper
 (`./mvnw -B -ntp -DskipTests package`), copies the exact JAR
-(`target/mediterraneapp-0.0.1-SNAPSHOT.jar`), runs as the non-root `app` user, exposes
-port 8080, and adds a `HEALTHCHECK` against `/recipe/status`. The `.dockerignore` keeps
-`target/` and IDE state out of the build context. The build was not exercised locally
-because Docker is unavailable in this environment; CI validates the Maven build only.
+(`target/mediterraneapp-0.0.1-SNAPSHOT.jar`) to `/app/app.jar`, runs as the non-root
+`app` user, exposes port 8080, and adds a `HEALTHCHECK` against `/recipe/status`. The
+`.dockerignore` keeps `target/` and IDE state out of the build context.
+
+The image was built and run locally on 2026-11-14 against PostgreSQL 16.16. Flyway
+applied the baseline, Hibernate validated the schema, the health check passed, and the
+API key and pagination behaved as documented. That run exposed a broken entrypoint:
+the JAR was copied to `/app/app.jar` under `WORKDIR /app`, but `ENTRYPOINT` used
+`-jar /app.jar`, so the container exited with "Unable to access jarfile". The
+entrypoint now uses `/app/app.jar`.
+
+**Remaining:** CI still builds the Maven project only, so a future Dockerfile change
+can regress without a failing check. A container build/smoke test in CI (or a registry
+digest pin) is the next step.
 
 ### OPS-3 — No authentication
 
