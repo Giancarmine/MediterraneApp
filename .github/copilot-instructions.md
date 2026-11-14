@@ -4,9 +4,9 @@ The canonical guidance for this repository is [`../AGENTS.md`](../AGENTS.md). Re
 first; this file is only a short pointer.
 
 MediterraneApp is a **Spring Boot 4.1 / Java 25 (LTS) REST API for recipes**, backed by
-PostgreSQL. It is a legacy portfolio project: it builds and has a test suite plus CI,
-but no authentication. No database credentials are checked in; supply
-`SPRING_DATASOURCE_*` at runtime.
+PostgreSQL. It is a legacy portfolio project: it builds, has a test suite plus CI, and
+protects the API with a shared `X-API-Key` key. No database credentials are checked in;
+supply `SPRING_DATASOURCE_*` at runtime.
 
 Key points:
 

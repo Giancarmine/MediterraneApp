@@ -1,8 +1,8 @@
 # MediterraneApp
 
 > Spring Boot 4.1 / Java 25 (LTS) REST API for recipes, ingredients, and preparation steps.
-> Legacy portfolio project (2020): builds, has a test suite and CI, but no
-> authentication or maintained deployment. License: GPL-3.0.
+> Legacy portfolio project (2020): builds, has a test suite and CI, and protects the API
+> with a shared API key, but has no maintained deployment. License: GPL-3.0.
 
 ## Start here
 
@@ -30,8 +30,10 @@
   `ddl-auto: validate`. Legacy `ddl-auto: update` databases are baselined at V1.
 - Configuration: `src/main/resources/application.yml`; override the datasource with
   `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
-  `SPRING_DATASOURCE_PASSWORD`. `APP_CORS_ALLOWED_ORIGINS` enables CORS for `/recipe/**`
-  (empty disables it).
+  `SPRING_DATASOURCE_PASSWORD`. `APP_API_KEY` is required and startup fails when it is
+  blank. `APP_CORS_ALLOWED_ORIGINS` enables CORS for `/recipe/**` (empty disables it).
+- Authentication: send `X-API-Key` on every `/recipe/**` request except `/recipe/status`.
+  Actuator and CORS preflight are open.
 - Operational endpoints: `GET /actuator/health` and `GET /actuator/info` only, with
   health details hidden.
 
@@ -52,7 +54,8 @@
 - `DELETE /recipe/{uuid}` -> delete, HTTP 200 body `"OK"`; 404 if absent. Shared
   ingredients are kept.
 - Errors use `timestamp`, `status`, `error`, `message`, and `path`; validation failures
-  are 400 and unique-constraint conflicts are 409.
+  are 400 and unique-constraint conflicts are 409. A missing or wrong API key returns
+  401 before the controller runs.
 
 ## Safety
 

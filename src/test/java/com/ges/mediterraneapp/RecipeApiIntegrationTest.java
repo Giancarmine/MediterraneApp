@@ -1,13 +1,18 @@
 package com.ges.mediterraneapp;
 
+import com.ges.mediterraneapp.config.ApiKeyFilter;
 import com.ges.mediterraneapp.model.dao.repository.IngredientRepository;
 import com.ges.mediterraneapp.model.dao.repository.RecipeRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.restclient.RestTemplateCustomizer;
 import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -33,7 +38,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureTestRestTemplate
 @ActiveProfiles("test")
+@Import(RecipeApiIntegrationTest.ApiKeyTestConfig.class)
 class RecipeApiIntegrationTest {
+
+    @TestConfiguration
+    static class ApiKeyTestConfig {
+        @Bean
+        RestTemplateCustomizer apiKeyCustomizer() {
+            return template -> template.getInterceptors().add((request, body, execution) -> {
+                request.getHeaders().set(ApiKeyFilter.HEADER_NAME, "test-api-key");
+                return execution.execute(request, body);
+            });
+        }
+    }
 
     @Autowired
     private TestRestTemplate rest;

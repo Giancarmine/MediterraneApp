@@ -4,9 +4,9 @@
 repository. This file is a short pointer for Claude Code.
 
 MediterraneApp is a Spring Boot 4.1 / Java 25 (LTS) REST API for recipes, backed by
-PostgreSQL. The project is a legacy portfolio app: it builds and has a test suite plus
-CI, but no authentication. No database credentials are checked in; supply
-`SPRING_DATASOURCE_*` at runtime.
+PostgreSQL. The project is a legacy portfolio app: it builds, has a test suite plus CI,
+and protects the API with a shared `X-API-Key` key. No database credentials are checked
+in; supply `SPRING_DATASOURCE_*` at runtime.
 
 ## Key facts
 

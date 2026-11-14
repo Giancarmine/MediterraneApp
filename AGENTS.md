@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Flyway, validated by Hibernate |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 16 main Java files, about 700 lines, 42 tests |
+| Size | 18 main Java files, about 750 lines, 54 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -35,9 +35,9 @@ consumed.
   `HttpStatus` serializer that writes `name()`, so the controller keeps returning the
   enum types. Do not replace that with `HttpStatus.*.name()` strings: a `String` return
   value is served as `text/plain` without quotes.
-- The test suite covers the mappers, the repositories, actuator/CORS, and the HTTP API.
-  It runs against H2 in PostgreSQL mode through the `test` profile; `./mvnw test` needs
-  no database.
+- The test suite covers the mappers, the repositories, actuator/CORS, API-key
+  authentication, and the HTTP API. It runs against H2 in PostgreSQL mode through the
+  `test` profile; `./mvnw test` needs no database.
 - `ApiExceptionHandler` is the single `@RestControllerAdvice`. It maps
   `NoSuchElementException` to `404`, `IllegalArgumentException` plus Bean Validation
   failures to `400`, and `DataIntegrityViolationException` to a generic `409`, using the
@@ -45,10 +45,12 @@ consumed.
 - `src/main/resources/application.yml` contains no database credentials. Supply the
   datasource through `SPRING_DATASOURCE_*` (or a local, untracked profile); the
   application will not start without it.
+- `ApiKeyFilter` requires `X-API-Key` on `/recipe/**`, except `GET /recipe/status`;
+  actuator and CORS preflight stay open. `APP_API_KEY` is required and startup fails
+  when it is blank.
 - GitHub Actions runs `./mvnw -B verify` on every push and pull request to `main`.
-  There is no authentication, OpenAPI document, or API versioning.
-  Actuator exposes only `health` and `info`, and CORS is opt-in through
-  `APP_CORS_ALLOWED_ORIGINS`.
+  There is no OpenAPI document or API versioning. Actuator exposes only `health` and
+  `info`, and CORS is opt-in through `APP_CORS_ALLOWED_ORIGINS`.
 
 See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for the prioritized list.
 
@@ -110,12 +112,14 @@ PostgreSQL is required to actually start the application (12+ recommended).
 ./mvnw spring-boot:run
 ```
 
-The configuration has no datasource credentials, so set them before the last command:
+The configuration has no datasource credentials, so set them (and an API key) before the
+last command:
 
 ```bash
 export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/mediterraneapp'
 export SPRING_DATASOURCE_USERNAME='mediterraneapp'
 export SPRING_DATASOURCE_PASSWORD='change-me'
+export APP_API_KEY='change-me-to-a-long-random-value'
 ```
 
 A disposable local database:
@@ -134,6 +138,10 @@ Smoke test:
 curl -i http://localhost:8080/recipe/status
 # HTTP/1.1 200
 # "I_AM_A_TEAPOT"
+
+curl -i -H "X-API-Key: $APP_API_KEY" http://localhost:8080/recipe
+# HTTP/1.1 200
+# {"content":[],"page":0,"size":20,"totalElements":0,"totalPages":0}
 ```
 
 Docker:
@@ -144,6 +152,7 @@ docker run --rm -p 8080:8080 \
   -e SPRING_DATASOURCE_URL='jdbc:postgresql://host.docker.internal:5432/mediterraneapp' \
   -e SPRING_DATASOURCE_USERNAME='mediterraneapp' \
   -e SPRING_DATASOURCE_PASSWORD='change-me' \
+  -e APP_API_KEY='change-me-to-a-long-random-value' \
   mediterraneapp
 ```
 
@@ -161,6 +170,7 @@ binding means environment variables override it:
 | `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | Required at startup; no value is committed |
 | `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | Required at startup; no value is committed |
 | `SERVER_PORT` | `server.port` | Defaults to `8080` |
+| `APP_API_KEY` | `app.api-key` | Required shared API key; startup fails when blank |
 | `APP_CORS_ALLOWED_ORIGINS` | `app.cors.allowed-origins` | Comma-separated origins; empty disables CORS |
 
 - `.env.example` lists the variable names. Spring Boot does **not** read `.env`
@@ -172,6 +182,9 @@ binding means environment variables override it:
 - `spring.flyway.baseline-on-migrate` is `true` with `baseline-version: 1`, so a non-empty
   legacy schema is not recreated.
 - `spring.jpa.show-sql` is `true`, so SQL is printed to the console.
+- `app.api-key` is required. `ApiKeyFilter` rejects a missing or wrong `X-API-Key` with
+  `401` before the controller runs. Actuator, `GET /recipe/status`, and `OPTIONS`
+  preflight bypass the filter.
 - Actuator is on the classpath and exposes only `/actuator/health` and `/actuator/info`;
   health details are hidden. Do not broaden the exposure set casually.
 - Hibernate auto-detects the dialect from the JDBC connection. Do not reintroduce an
@@ -216,22 +229,25 @@ RecipeMapper / IngredientMapper  hand-written entity <-> DTO conversion
 | `model/dto/IngredientDto.java` | JSON shape for ingredients; `NON_NULL` inclusion. |
 | `config/JacksonConfig.java` | Preserves enum-name JSON for `HttpStatus` bodies. |
 | `config/CorsConfig.java` | Opt-in CORS for `/recipe/**` from configured origins. |
-| `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate, CORS, actuator. |
+| `config/ApiKeyFilter.java` | Requires `X-API-Key` on `/recipe/**` (except `/recipe/status`). |
+| `src/main/resources/application.yml` | Datasource, Hikari pool, JPA/Hibernate, API key, CORS, actuator. |
 
 There is no `IngredientController` and no service interfaces. `ApiExceptionHandler` is
 the only `@RestControllerAdvice`.
 
 ### Request flow
 
-1. Jackson 3 deserializes the body into a `RecipeDto`.
-2. `RecipeController` calls `RecipeService` to load or create the entity.
-3. `RecipeMapper.updateModel` copies fields and resolves each `IngredientDto` through
+1. `ApiKeyFilter` checks `X-API-Key` for `/recipe/**` (except `/recipe/status`) and
+   returns `401` before dispatching when it is missing or wrong.
+2. Jackson 3 deserializes the body into a `RecipeDto`.
+3. `RecipeController` calls `RecipeService` to load or create the entity.
+4. `RecipeMapper.updateModel` copies fields and resolves each `IngredientDto` through
    `IngredientService.findIngredientByNameAndAmountAndMeasurement`. A missing ingredient
    becomes a new transient `Ingredient`. It never changes the entity UUID.
-4. `RecipeService` saves the entity inside a `@Transactional` method.
+5. `RecipeService` saves the entity inside a `@Transactional` method.
    `PERSIST`/`MERGE` on the ingredient relation persists new ingredients and join rows.
    Validation runs before this step.
-5. `RecipeMapper.toDto` converts the saved entity back to JSON.
+6. `RecipeMapper.toDto` converts the saved entity back to JSON.
 
 Reads are simpler: controller → service → repository → mapper → DTO.
 
@@ -280,7 +296,8 @@ Important persistence facts:
 ## API surface
 
 All paths are under `/recipe`. Full payloads and status codes are in
-[`docs/API.md`](docs/API.md).
+[`docs/API.md`](docs/API.md). Every `/recipe/**` call except `GET /recipe/status` requires
+the `X-API-Key` header; a missing or wrong key returns `401`.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
@@ -352,7 +369,7 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (42 tests):
+Current coverage (54 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
@@ -361,18 +378,22 @@ Current coverage (42 tests):
   plus the unique-name constraint.
 - `model/dao/repository/IngredientRepositoryTest` — unique ingredient identity triple.
 - `controller/ApiExceptionHandlerTest` — `409` mapping without leaking database details.
+- `config/ApiKeyFilterTest` — missing/wrong/valid keys, the open endpoints, and the
+  fail-fast blank-key check.
+- `ApiKeyTest` — the same behavior through the real servlet container, including the
+  `401` error body.
 - `ActuatorTest` — health is exposed with `UP` and no details, and other endpoints are
   not exposed.
 - `CorsConfigTest` — a configured origin passes preflight and an unknown origin is
   rejected.
 - `RecipeApiIntegrationTest` — full HTTP behavior with `@SpringBootTest(RANDOM_PORT)`
   and `TestRestTemplate`, so error responses go through the real error dispatch. It
-  covers status, create, list, get, missing row (404), invalid UUID (400), bulk, bulk
-  rollback, upsert-by-name (200 on update), validation (400, including overlong and
-  blank fields), PUT with matching/omitted/mismatched UUID, delete, delete 404, orphan
-  cleanup, update cleanup for dropped and shared ingredients, ignored client-supplied
-  UUID on create, pagination defaults/bounds, and shared-ingredient delete (200,
-  ingredient kept).
+  attaches the API key through a `RestTemplateCustomizer` and covers status, create,
+  list, get, missing row (404), invalid UUID (400), bulk, bulk rollback, upsert-by-name
+  (200 on update), validation (400, including overlong and blank fields), PUT with
+  matching/omitted/mismatched UUID, delete, delete 404, orphan cleanup, update cleanup
+  for dropped and shared ingredients, ignored client-supplied UUID on create, pagination
+  defaults/bounds, and shared-ingredient delete (200, ingredient kept).
 
 Guidance:
 
@@ -390,9 +411,15 @@ Guidance:
 
 ## Security
 
-- No endpoint has authentication or authorization. Do not expose this API publicly
-  without adding both.
-- No authentication or rate limiting exists. Add both before exposing the API publicly.
+- Every `/recipe/**` endpoint except `GET /recipe/status` requires the shared key in
+  `X-API-Key`. The key comes from `APP_API_KEY`; startup fails when it is blank. Actuator
+  and CORS preflight are open.
+- There is no per-user authentication or authorization; all clients share one key.
+  Rotating it requires restarting the application. Terminate TLS in front of the API.
+- There is no rate limiting. Add it at the gateway or proxy before exposing the API
+  publicly (`OPS-5`).
+- Do not weaken or bypass `ApiKeyFilter`, and do not add endpoints under `/recipe` that
+  skip it without an explicit reason and documentation.
 - CORS is disabled unless `APP_CORS_ALLOWED_ORIGINS` lists one or more origins. Add
   origins deliberately; there is no wildcard default.
 - Input validation uses `@NotBlank` and `@Size` on the DTOs. Add further constraints
@@ -408,7 +435,7 @@ Guidance:
 The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Highlights:
 
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
-2. No authentication or rate limiting.
+2. No request rate limiting.
 3. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 
@@ -439,7 +466,8 @@ Use a branch and pull request for non-trivial work. Do not commit generated arti
 ## Out of scope unless explicitly requested
 
 - Upgrading to Spring Boot 3 / Jakarta EE.
-- Adding authentication, a frontend, or API versioning.
+- Replacing the shared API key with per-client keys, OAuth2, or a user directory.
+- Adding a frontend or API versioning.
 - Rewriting the mappers with MapStruct.
 - Changing the license.
 - Force-pushing, history rewriting, or deleting branches.
