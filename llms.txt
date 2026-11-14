@@ -38,7 +38,8 @@
 ## API summary
 
 - `GET /recipe/status` -> HTTP 200 body `"I_AM_A_TEAPOT"`.
-- `GET /recipe` -> all recipes.
+- `GET /recipe` -> one page of recipes sorted by `name`; `page` defaults to 0 and `size`
+  to 20 (max 100). The response is `{content, page, size, totalElements, totalPages}`.
 - `GET /recipe/{uuid}` -> one recipe; 404 if absent, 400 for an invalid UUID.
 - `POST /recipe` -> create or update by `name`; 201 on create, 200 on update, 409 on a
   unique-name conflict. Replacing `ingredients` deletes dropped ingredients that no

@@ -96,7 +96,50 @@ class RecipeApiIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertJson(response);
-        assertThat(JsonPath.<List<String>>read(response.getBody(), "$[*].uuid")).contains(uuid);
+        assertThat(JsonPath.<List<String>>read(response.getBody(), "$.content[*].uuid"))
+                .contains(uuid);
+    }
+
+    @Test
+    void listRecipesReturnsPageEnvelope() {
+        createRecipe(unique("PagedRecipe"), unique("PagedIngredient"));
+
+        ResponseEntity<String> response = rest.getForEntity("/recipe?page=0&size=1", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertJson(response);
+        assertThat(JsonPath.<Integer>read(response.getBody(), "$.page")).isZero();
+        assertThat(JsonPath.<Integer>read(response.getBody(), "$.size")).isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(response.getBody(), "$.totalElements"))
+                .isGreaterThanOrEqualTo(1);
+        assertThat(JsonPath.<List<Object>>read(response.getBody(), "$.content")).hasSize(1);
+    }
+
+    @Test
+    void listRecipesRejectsNegativePage() {
+        ResponseEntity<String> response = rest.getForEntity("/recipe?page=-1", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("page");
+    }
+
+    @Test
+    void listRecipesRejectsTooLargePageSize() {
+        ResponseEntity<String> response = rest.getForEntity("/recipe?size=101", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("size");
+    }
+
+    @Test
+    void listRecipesRejectsNonNumericPage() {
+        ResponseEntity<String> response = rest.getForEntity("/recipe?page=abc", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertJson(response);
+        assertThat(JsonPath.<String>read(response.getBody(), "$.message")).contains("page");
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.ges.mediterraneapp.model.dao;
 
 import lombok.Data;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
@@ -29,10 +30,12 @@ public class Recipe {
     String totalTime;
 
     @ElementCollection
+    @BatchSize(size = 50)
     @Column(length=2500)
     Set<String> steps;
 
     @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE })
+    @BatchSize(size = 50)
     Set<Ingredient> ingredients;
 
     @Column(name = "created_at", nullable = false, updatable = false)

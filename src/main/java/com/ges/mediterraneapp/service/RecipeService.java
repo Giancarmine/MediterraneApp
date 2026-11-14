@@ -5,8 +5,12 @@ import com.ges.mediterraneapp.model.dao.Ingredient;
 import com.ges.mediterraneapp.model.dao.Recipe;
 import com.ges.mediterraneapp.model.dao.repository.IngredientRepository;
 import com.ges.mediterraneapp.model.dao.repository.RecipeRepository;
+import com.ges.mediterraneapp.model.dto.PageResponse;
 import com.ges.mediterraneapp.model.dto.RecipeDto;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +35,16 @@ public class RecipeService {
         this.recipeMapper = recipeMapper;
     }
 
-    public List<Recipe> getAllRecipe () {
-        return recipeRepository.findAll();
+    @Transactional(readOnly = true)
+    public PageResponse<RecipeDto> getRecipes (int page, int size) {
+        PageRequest request = PageRequest.of(page, size, Sort.by("name"));
+        Page<Recipe> recipes = recipeRepository.findAll(request);
+        List<RecipeDto> content = recipes.getContent().stream()
+                .map(recipeMapper::toDto)
+                .toList();
+
+        return new PageResponse<>(content, recipes.getNumber(), recipes.getSize(),
+                recipes.getTotalElements(), recipes.getTotalPages());
     }
 
     public Recipe findRecipeByUuid (String uuid) {

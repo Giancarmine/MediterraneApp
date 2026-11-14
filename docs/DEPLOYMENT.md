@@ -43,8 +43,8 @@ datasource through the environment; the paths below are templates.
    ```bash
    curl -i http://localhost:8080/recipe/status
    # 200, body: "I_AM_A_TEAPOT"
-   curl -i http://localhost:8080/recipe
-   # 200, body: []
+   curl -i 'http://localhost:8080/recipe?page=0&size=20'
+   # 200, body: {"content":[],"page":0,"size":20,"totalElements":0,"totalPages":0}
    ```
 
 On the first startup Flyway applies `db/migration/V1__baseline.sql`, then Hibernate
