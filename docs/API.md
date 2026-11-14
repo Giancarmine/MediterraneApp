@@ -216,6 +216,9 @@ curl -i -X PUT http://localhost:8080/recipe/3f2b1c4e-8a7d-4c2b-9e61-5d0f4a6b7c81
 - `400 Bad Request` when the path UUID or a supplied body `uuid` is invalid.
 - The path UUID is authoritative. The body `uuid` is optional; if present, it must match
   the path. A mismatch returns `400 Bad Request` and leaves the row unchanged.
+- Supplying `ingredients` replaces the set. Ingredients from the previous set that no
+  recipe references any more are deleted; shared ingredients are kept. Omitting
+  `ingredients` keeps the existing set and skips the cleanup.
 
 ### `DELETE /recipe/{uuid}`
 

@@ -14,7 +14,7 @@ changing code.
 | Build | Maven via the committed wrapper (`./mvnw`, Maven 3.9.16) |
 | Database | PostgreSQL; schema managed by Hibernate `ddl-auto: update` |
 | Libraries | Lombok 1.18.48 (Boot BOM), Jackson 3 |
-| Size | 16 main Java files, about 600 lines, 31 tests |
+| Size | 16 main Java files, about 600 lines, 33 tests |
 | Status | Legacy portfolio project (2020), not production-ready |
 | License | GPL-3.0 (see `LICENSE`) |
 
@@ -260,7 +260,9 @@ Important persistence facts:
 - `CascadeType.ALL` is not used. `PERSIST`/`MERGE` create ingredients, but `REMOVE` is
   absent. `RecipeService.deleteRecipe` deletes join rows and then deletes only
   ingredients that no recipe still references. Shared ingredients are kept, and the
-  request returns `200` instead of `500`.
+  request returns `200` instead of `500`. Updates run the same cleanup for ingredients
+  dropped by a replacement ingredient set, but only when the request supplies
+  `ingredients`.
 - `steps` and the many-to-many join table are created by Hibernate with generated names.
 - There is no pagination; `GET /recipe` loads the whole table.
 
@@ -294,6 +296,8 @@ Current behavior that must be preserved unless the owner asks for a breaking cha
   to `409 Conflict` with a generic message.
 - `DELETE /recipe/{uuid}` removes join rows and deletes only ingredients no other recipe
   references. Shared ingredients are kept; the response is `200 OK` with `"OK"`.
+- Replacing a recipe's `ingredients` on `POST`/`PUT` deletes the dropped ingredients that
+  no other recipe references. Omitting `ingredients` keeps the existing set.
 - `POST /recipe/bulk` runs in one transaction: an invalid item fails validation before
   any write, and a persistence failure rolls back the whole batch.
 - Returning `HttpStatus` from a `@RestController` method writes the enum name as the
@@ -330,7 +334,7 @@ mode through `src/test/resources/application-test.yml` (profile `test`). They ne
 touch a remote database. JUnit 5, Mockito, AssertJ, JsonPath, and the Boot
 test starters are on the test classpath.
 
-Current coverage (31 tests):
+Current coverage (33 tests):
 
 - `mapper/RecipeMapperTest` and `mapper/IngredientMapperTest` — field mapping,
   null-collection behavior, ingredient resolution, and the rule that `updateModel` never
@@ -344,7 +348,8 @@ Current coverage (31 tests):
   covers status, create, list, get, missing row (404), invalid UUID (400), bulk, bulk
   rollback, upsert-by-name (200 on update), validation (400, including overlong and
   blank fields), PUT with matching/omitted/mismatched UUID, delete, delete 404, orphan
-  cleanup, and shared-ingredient delete (200, ingredient kept).
+  cleanup, update cleanup for dropped and shared ingredients, and shared-ingredient
+  delete (200, ingredient kept).
 
 Guidance:
 
@@ -380,9 +385,7 @@ The prioritized list lives in [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md). Hi
 1. Historical Heroku credentials remain in Git history; no credentials are checked in.
 2. `StepRepository` is unused and malformed.
 3. Dockerfile relies on a wildcard copy for the packaged JAR.
-4. Updating a recipe can orphan ingredients that the previous version referenced
-   (`DATA-4`); deletion cleanups do not cover this path.
-5. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
+4. The `POST` upsert by `name` still overwrites duplicates by design; changing the key
    needs a migration plan.
 
 ## Change workflow

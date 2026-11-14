@@ -29,7 +29,7 @@ Severity:
 | CODE-1 | P2 | `StepRepository` is malformed and unused | Open |
 | DATA-2 | P2 | Ingredient triple has no unique constraint | **Fixed** |
 | DATA-3 | P2 | `ddl-auto: update` is the only schema management | Open |
-| DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | Open |
+| DATA-4 | P2 | Recipe updates can orphan previously referenced ingredients | **Fixed** |
 | OPS-2 | P2 | Dockerfile uses a fragile wildcard copy | Open |
 | OPS-3 | P2 | No auth, CORS, actuator, or rate limiting | Open |
 | API-5 | P2 | No pagination on `GET /recipe` | Open |
@@ -136,7 +136,7 @@ cascade.
 **Evidence:** there was no `src/test` directory; `./mvnw test` reported "No tests to
 run".
 
-**Fix applied:** added 31 tests covering the two mappers, the repositories, the
+**Fix applied:** added 33 tests covering the two mappers, the repositories, the
 exception handler, and the full HTTP API. They run on H2 in PostgreSQL mode via the
 `test` profile and never touch a remote database. Use `@SpringBootTest(RANDOM_PORT)` plus
 `TestRestTemplate` for error responses, because `MockMvc` rethrows unhandled exceptions
@@ -189,21 +189,19 @@ maps `nameIngredient` to the explicit `name_ingredient` column. A regression tes
 that a duplicate triple violates the constraint. Normalizing ingredient names and units
 instead of using free text remains future work.
 
-### DATA-4 — Recipe updates can orphan previously referenced ingredients
+### DATA-4 — Recipe updates could orphan previously referenced ingredients
 
 **Evidence:** `RecipeService.deleteRecipe` deletes ingredients that no recipe references,
-but `upsertRecipe` and `updateRecipe` replace `Recipe.ingredients` and never clean up
-ingredients that the previous version referenced and nothing else does. Repeated updates
-can leave unreachable ingredient rows.
+but `upsertRecipe` and `updateRecipe` replaced `Recipe.ingredients` without cleaning up
+ingredients that the previous version referenced and nothing else did. Repeated updates
+could leave unreachable ingredient rows.
 
-**Impact:** storage growth and misleading counts in any future ingredient endpoint. Reads
-are unaffected because they start from recipes.
-
-**Fix:** after an update that replaces the ingredient set, compute the removed ingredients
-and delete those no recipe still references, using the same
-`existsByIngredients_Uuid` check as deletion. Cover it with an integration test. This is
-the same ownership question as `DATA-1`; decide who owns an ingredient before changing
-the model.
+**Fix applied:** `applyUpdate` snapshots the previous ingredient set and, when the request
+supplies an `ingredients` field, deletes removed ingredients that no recipe references any
+more (same `existsByIngredients_Uuid` check as deletion). An omitted field keeps the old
+set and skips cleanup. Integration tests cover the orphaned and shared cases. This
+completes the ownership cleanup; the remaining decision is whether ingredient rows should
+be normalized or garbage-collected in a migration.
 
 ### DATA-3 — `ddl-auto: update` is the only schema management
 
@@ -349,7 +347,7 @@ coordinates and any dependency references.
 
 - Build verified with Temurin 25.0.5+8 and Maven Wrapper 3.9.16 (Spring Boot 4.1.2):
   `./mvnw -B -DskipTests package` → `BUILD SUCCESS`.
-- `./mvnw test` → 31 tests, 0 failures, `BUILD SUCCESS`.
+- `./mvnw test` → 33 tests, 0 failures, `BUILD SUCCESS`.
 - Spring Boot 4 / Jackson 3 serialize enums with `toString()`, which would have changed
   the `"I_AM_A_TEAPOT"`, `"CREATED"`, and `"OK"` bodies. `JacksonConfig` registers an
   `HttpStatus` serializer that writes the enum name.
@@ -360,6 +358,6 @@ coordinates and any dependency references.
 - The integration tests exercise the API against H2 in PostgreSQL mode (create, read,
   upsert, bulk including rollback, validation, missing row returning 404, invalid UUID
   returning 400, PUT with matching/omitted/mismatched UUID, delete with 404 and orphan
-  cleanup, shared-ingredient delete, and unique-constraint conflicts returning 409). The
-  same behavior is expected on PostgreSQL, but it was not exercised against a live
-  PostgreSQL server.
+  cleanup, update cleanup for dropped and shared ingredients, shared-ingredient delete,
+  and unique-constraint conflicts returning 409). The same behavior is expected on
+  PostgreSQL, but it was not exercised against a live PostgreSQL server.

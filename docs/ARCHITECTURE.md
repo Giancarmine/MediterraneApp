@@ -120,6 +120,9 @@ Consequences:
 - `recipe.name` is unique. Concurrent creates that race on the same name fail the
   constraint; `ApiExceptionHandler` maps `DataIntegrityViolationException` to a generic
   `409 Conflict`.
+- Updating a recipe also removes ingredients that the previous version referenced and
+  that no recipe references any more. An omitted `ingredients` field keeps the old set,
+  so the cleanup only runs when the request replaces it.
 - `upsertRecipes` handles the whole bulk body in one transaction. Validation still runs
   first, so an invalid item fails the request before any write; a persistence failure
   rolls back every item.
@@ -136,7 +139,8 @@ Consequences:
 
 The cascade is `PERSIST`/`MERGE` only, so deleting a recipe never deletes a shared
 ingredient. The trade-off is that the orphan cleanup is explicit rather than a database
-cascade.
+cascade. Updates use the same helper: ingredients dropped by a new ingredient set are
+deleted when no recipe references them.
 
 ## Persistence model
 

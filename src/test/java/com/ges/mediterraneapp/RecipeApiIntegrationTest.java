@@ -262,6 +262,43 @@ class RecipeApiIntegrationTest {
     }
 
     @Test
+    void updateRecipeRemovesIngredientsThatBecomeUnreferenced() {
+        String uuid = createRecipe(unique("UpdateOrphanOwner"), unique("OldIngredient"));
+        String oldIngredientUuid = readIngredientUuid(uuid);
+
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(oldIngredientUuid))).isPresent();
+
+        ResponseEntity<String> response = putJson("/recipe/{uuid}",
+                recipeJson(unique("UpdateOrphanOwnerAfter"), unique("NewIngredient")),
+                uuid);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertJson(response);
+        String newIngredientUuid = JsonPath.read(response.getBody(), "$.ingredients[0].uuid");
+
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(oldIngredientUuid))).isEmpty();
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(newIngredientUuid))).isPresent();
+    }
+
+    @Test
+    void updateRecipeKeepsIngredientSharedWithAnotherRecipe() {
+        String sharedIngredient = unique("SharedUpdateIngredient");
+        String firstUuid = createRecipe(unique("SharedUpdateFirst"), sharedIngredient);
+        String secondUuid = createRecipe(unique("SharedUpdateSecond"), sharedIngredient);
+        String sharedIngredientUuid = readIngredientUuid(firstUuid);
+
+        ResponseEntity<String> response = putJson("/recipe/{uuid}",
+                recipeJson(unique("SharedUpdateFirstAfter"), unique("SharedUpdateReplacement")),
+                firstUuid);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertJson(response);
+
+        assertThat(ingredientRepository.findByUuid(UUID.fromString(sharedIngredientUuid))).isPresent();
+        assertThat(readIngredientUuid(secondUuid)).isEqualTo(sharedIngredientUuid);
+    }
+
+    @Test
     void deleteRecipeReturnsOkAndRemovesTheRow() {
         String uuid = createRecipe(unique("DeleteMe"), unique("DeleteIngredient"));
 
